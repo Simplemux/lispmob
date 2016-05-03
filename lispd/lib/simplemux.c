@@ -765,7 +765,7 @@ int mux_packets (unsigned char *packet_in, uint32_t size_packet_in, data_simplem
 				// End Update simplemux data --------------------------------------------------------
 				//-----------------------------------------------------------------------------------
 
-LMLOG(LINF, "salgo de mux_packet I %d\n",result);
+//LMLOG(LINF, "salgo de mux_packet I %d\n",result);
 				return(result);
 
 			}	/*** end check if size limit would be reached ***/
@@ -1146,7 +1146,7 @@ LMLOG(LINF, "salgo de mux_packet I %d\n",result);
 	// End Update simplemux data --------------------------------------------------------
 	//-----------------------------------------------------------------------------------
 
-LMLOG(LINF, "salgo de mux_packets II %d\n",result);
+//LMLOG(LINF, "salgo de mux_packets II %d\n",result);
 	return(result);
 
 }
