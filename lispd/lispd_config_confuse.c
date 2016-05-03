@@ -1,5 +1,6 @@
 /*
  *
+ *
  * Copyright (C) 2011, 2015 Cisco Systems, Inc.
  * Copyright (C) 2015 CBA research group, Technical University of Catalonia.
  *
@@ -35,6 +36,20 @@
 #include "data-plane/data-plane.h"
 #include "lib/lmlog.h"
 #include "lib/shash.h"
+
+/*SIMPLEMUX: variables and includes for simplemux*/
+#include "lib/simplemux.h"
+int res;
+struct in_addr ipsrcbin;
+struct in_addr ipdstbin;
+struct in_addr lispsrcbin;
+struct in_addr lispdstbin;
+struct in_addr netipsrcbin;
+struct in_addr netipdstbin;
+int numdsm;
+data_simplemux_t conf_sm[10];
+/*SIMPLEMUX: variables and includes for simplemux*/
+
 
 static void
 parse_elp_list(cfg_t *cfg, shash_t *ht)
@@ -296,6 +311,7 @@ configure_rtr(cfg_t *cfg)
 
     /* MAP-RESOLVER CONFIG  */
     n = cfg_size(cfg, "map-resolver");
+
     for(i = 0; i < n; i++) {
         if ((map_resolver = cfg_getnstr(cfg, "map-resolver", i)) != NULL) {
             if (add_server(map_resolver, xtr->map_resolvers) == GOOD){
@@ -554,6 +570,282 @@ configure_xtr(cfg_t *cfg)
             }
         }
     }
+
+    n = cfg_size(cfg, "database-mapping");
+    for (i = 0; i < n; i++) {
+        mapping = parse_mapping(cfg_getnsec(cfg, "database-mapping", i),&(xtr->super),lcaf_ht,TRUE);
+        if (mapping == NULL){
+            continue;
+        }
+        map_loc_e = map_local_entry_new_init(mapping);
+        if (map_loc_e == NULL){
+            mapping_del(mapping);
+            continue;
+        }
+        fwd_map_inf = xtr->fwd_policy->new_map_loc_policy_inf(xtr->fwd_policy_dev_parm,mapping,NULL);
+        if (fwd_map_inf == NULL){
+            LMLOG(LERR, "Couldn't create forward information for mapping with EID: %s. Discarding it...",
+                    lisp_addr_to_char(mapping_eid(mapping)));
+            map_local_entry_del(map_loc_e);
+            continue;
+        }
+        map_local_entry_set_fwd_info(map_loc_e, fwd_map_inf, xtr->fwd_policy->del_map_loc_policy_inf);
+
+        if (add_local_db_map_local_entry(map_loc_e,xtr) != GOOD){
+            map_local_entry_del(map_loc_e);
+            continue;
+        }
+
+    }
+
+    /* STATIC MAP-CACHE CONFIG */
+    n = cfg_size(cfg, "static-map-cache");
+    for (i = 0; i < n; i++) {
+        cfg_t *smc = cfg_getnsec(cfg, "static-map-cache", i);
+        mapping = parse_mapping(smc,&(xtr->super),lcaf_ht,FALSE);
+
+        if (mapping == NULL){
+            LMLOG(LERR, "Can't add static Map Cache entry with EID prefix %s. Discarded ...",
+                    cfg_getstr(smc, "eid-prefix"));
+            continue;
+        }
+        if (mcache_lookup_exact(xtr->map_cache, mapping_eid(mapping)) == NULL){
+            if (tr_mcache_add_static_mapping(xtr, mapping) == GOOD){
+                LMLOG(LDBG_1, "Added static Map Cache entry with EID prefix %s in the database.",
+                        lisp_addr_to_char(mapping_eid(mapping)));
+            }else{
+                LMLOG(LERR, "Can't add static Map Cache entry with EID prefix %s. Discarded ...",
+                        mapping_eid(mapping));
+                mapping_del(mapping);
+            }
+        }else{
+            LMLOG(LERR, "Configuration file: Duplicated static Map Cache entry with EID prefix %s."
+                    "Discarded ...",cfg_getstr(smc, "eid-prefix"));
+            mapping_del(mapping);
+            continue;
+        }
+        continue;
+    }
+
+    /* destroy the hash table */
+    shash_destroy(lcaf_ht);
+
+    return(GOOD);
+}
+
+/*SIMPLEMUX: parameter configuration for simplemux*/
+int
+configure_xtrsm(cfg_t *cfg)
+{
+    int i, n, ret;
+    char *map_resolver;
+    char *proxy_itr;
+    shash_t *lcaf_ht;
+    lisp_xtr_t *xtr;
+    map_local_entry_t *map_loc_e;
+    mapping_t *mapping;
+    void *fwd_map_inf;
+
+
+    /* CREATE AND CONFIGURE XTR */
+    if (ctrl_dev_create(xTR_MODE, &ctrl_dev) != GOOD) {
+        LMLOG(LCRIT, "Failed to create xTR. Aborting!");
+        exit_cleanup();
+    }
+
+    xtr = CONTAINER_OF(ctrl_dev, lisp_xtr_t, super);
+
+    /* FWD POLICY STRUCTURES */
+    xtr->fwd_policy = fwd_policy_class_find("flow_balancing");
+    xtr->fwd_policy_dev_parm = xtr->fwd_policy->new_dev_policy_inf(ctrl_dev,NULL);
+
+
+    /* CREATE LCAFS HTABLE */
+
+    /* get a hash table of all the elps. If any are configured,
+     * their names could appear in the rloc field of database mappings
+     * or static map cache entries  */
+    lcaf_ht = parse_lcafs(cfg);
+
+
+    /* RETRIES */
+    ret = cfg_getint(cfg, "map-request-retries");
+    xtr->map_request_retries = (ret != 0) ? ret : DEFAULT_MAP_REQUEST_RETRIES;
+
+
+    /* RLOC PROBING CONFIG */
+    cfg_t *dm = cfg_getnsec(cfg, "rloc-probing", 0);
+    if (dm != NULL) {
+        xtr->probe_interval = cfg_getint(dm, "rloc-probe-interval");
+        xtr->probe_retries = cfg_getint(dm, "rloc-probe-retries");
+        xtr->probe_retries_interval = cfg_getint(dm,
+                "rloc-probe-retries-interval");
+
+        validate_rloc_probing_parameters(&xtr->probe_interval,
+                &xtr->probe_retries, &xtr->probe_retries_interval);
+    } else {
+        LMLOG(LDBG_1, "Configuration file: RLOC probing not defined. "
+                "Setting default values: RLOC Probing Interval: %d sec.",
+        RLOC_PROBING_INTERVAL);
+    }
+
+
+    /* NAT Traversal options */
+    cfg_t *nt = cfg_getnsec(cfg, "nat-traversal", 0);
+    if (nt != NULL) {
+        xtr->nat_aware = cfg_getbool(nt, "nat_aware") ? TRUE:FALSE;
+        char *nat_site_ID = cfg_getstr(nt, "site_ID");
+        char *nat_xTR_ID  = cfg_getstr(nt, "xTR_ID");
+        if (xtr->nat_aware == TRUE){
+            if ((convert_hex_string_to_bytes(nat_site_ID,
+                    xtr->site_id.byte, 8)) != GOOD){
+                LMLOG(LCRIT, "Configuration file: Wrong Site-ID format");
+                exit_cleanup();
+            }
+            if ((convert_hex_string_to_bytes(nat_xTR_ID,
+                    xtr->xtr_id.byte, 16)) != GOOD){
+                LMLOG(LCRIT, "Configuration file: Wrong xTR-ID format");
+                exit_cleanup();
+            }
+        }
+    }else {
+        xtr->nat_aware = FALSE;
+    }
+
+
+    /* MAP-RESOLVER CONFIG  */
+    n = cfg_size(cfg, "map-resolver");
+    for(i = 0; i < n; i++) {
+        if ((map_resolver = cfg_getnstr(cfg, "map-resolver", i)) != NULL) {
+            if (add_server(map_resolver, xtr->map_resolvers) == GOOD){
+                LMLOG(LDBG_1, "Added %s to map-resolver list", map_resolver);
+            }else{
+                LMLOG(LCRIT,"Can't add %s Map Resolver.",map_resolver);
+            }
+        }
+    }
+
+    /* MAP-SERVER CONFIG */
+    n = cfg_size(cfg, "map-server");
+    for (i = 0; i < n; i++) {
+        cfg_t *ms = cfg_getnsec(cfg, "map-server", i);
+        if (add_map_server(xtr->map_servers, cfg_getstr(ms, "address"),
+                cfg_getint(ms, "key-type"), cfg_getstr(ms, "key"),
+                (cfg_getbool(ms, "proxy-reply") ? 1 : 0)) == GOOD) {
+            LMLOG(LDBG_1, "Added %s to map-server list",
+                    cfg_getstr(ms, "address"));
+        } else {
+            LMLOG(LWRN, "Can't add %s Map Server.", cfg_getstr(ms, "address"));
+        }
+    }
+
+    /* PROXY-ETR CONFIG */
+    n = cfg_size(cfg, "proxy-etr");
+    for(i = 0; i < n; i++) {
+        cfg_t *petr = cfg_getnsec(cfg, "proxy-etr", i);
+        if (add_proxy_etr_entry(xtr->petrs,
+                cfg_getstr(petr, "address"),
+                cfg_getint(petr, "priority"),
+                cfg_getint(petr, "weight")) == GOOD) {
+            LMLOG(LDBG_1, "Added %s to proxy-etr list", cfg_getstr(petr, "address"));
+        } else{
+            LMLOG(LERR, "Can't add proxy-etr %s", cfg_getstr(petr, "address"));
+        }
+    }
+
+    /* Calculate forwarding info for petrs */
+    fwd_map_inf = xtr->fwd_policy->new_map_cache_policy_inf(xtr->fwd_policy_dev_parm,mcache_entry_mapping(xtr->petrs));
+    if (fwd_map_inf == NULL){
+        LMLOG(LDBG_1, "xtr_ctrl_construct: Couldn't create routing info for PeTRs!.");
+        mcache_entry_del(xtr->petrs);
+        return(BAD);
+    }
+    mcache_entry_set_routing_info(xtr->petrs,fwd_map_inf,xtr->fwd_policy->del_map_cache_policy_inf);
+
+
+    /* PROXY-ITR CONFIG */
+    n = cfg_size(cfg, "proxy-itrs");
+    for(i = 0; i < n; i++) {
+        if ((proxy_itr = cfg_getnstr(cfg, "proxy-itrs", i)) != NULL) {
+            if (add_server(proxy_itr, xtr->pitrs)==GOOD){
+                LMLOG(LDBG_1, "Added %s to proxy-itr list", proxy_itr);
+            }else {
+                LMLOG(LERR, "Can't add %s to proxy-itr list. Discarded ...", proxy_itr);
+            }
+        }
+    }
+
+
+/*SIMPLEMUX: simplemux data*/
+    n = cfg_size(cfg, "simplemux");
+    numdsm=n;
+    if (n>10){n=10;LMLOG(LINF,"The simplemux data is more than 10, so will take only 10\n");}
+    numdsm=n;
+    for (i = 0; i < n; i++) 
+    {
+        int afi;
+        char *token;
+        
+        if (cfg_getstr(cfg_getnsec(cfg, "simplemux",i),"ipsrc")!=NULL)
+           {
+           afi = ip_afi_from_char(cfg_getstr(cfg_getnsec(cfg, "simplemux",i),"ipsrc"));
+           res=inet_pton(afi,cfg_getstr(cfg_getnsec(cfg, "simplemux",i),"ipsrc"),&ipsrcbin); 
+           ip_addr_init(&(conf_sm[i].mux_tuple.src_addr),&ipsrcbin,afi);
+           } 
+        if (cfg_getstr(cfg_getnsec(cfg, "simplemux",i),"ipdst")!=NULL)
+           {
+           afi = ip_afi_from_char(cfg_getstr(cfg_getnsec(cfg, "simplemux",i),"ipdst"));
+           res=inet_pton(afi,cfg_getstr(cfg_getnsec(cfg, "simplemux",i),"ipdst"),&ipdstbin); 
+           ip_addr_init(&(conf_sm[i].mux_tuple.dst_addr),&ipdstbin,afi);
+           } 
+        if (cfg_getstr(cfg_getnsec(cfg, "simplemux",i),"lispsrc")!=NULL)
+           {
+           afi = ip_afi_from_char(cfg_getstr(cfg_getnsec(cfg, "simplemux",i),"lispsrc"));
+           res=inet_pton(afi,cfg_getstr(cfg_getnsec(cfg, "simplemux",i),"lispsrc"),&lispsrcbin); 
+           ip_addr_init(&(conf_sm[i].mux_tuple.srloc.ip),&lispsrcbin,afi);
+           } 
+        if (cfg_getstr(cfg_getnsec(cfg, "simplemux",i),"lispdst")!=NULL)
+           {
+           afi = ip_afi_from_char(cfg_getstr(cfg_getnsec(cfg, "simplemux",i),"lispdst"));
+           res=inet_pton(afi,cfg_getstr(cfg_getnsec(cfg, "simplemux",i),"lispdst"),&lispdstbin); 
+           ip_addr_init(&(conf_sm[i].mux_tuple.drloc.ip),&lispdstbin,afi);
+           } 
+        if (cfg_getstr(cfg_getnsec(cfg, "simplemux",i),"netsrc")!=NULL)
+           {
+           token=strtok(cfg_getstr(cfg_getnsec(cfg, "simplemux",i),"netsrc"),"/");
+           afi = ip_afi_from_char(token);
+           res=inet_pton(afi,token,&netipsrcbin); 
+           ip_addr_init(&(conf_sm[i].mux_tuple.src_net),&netipsrcbin,afi);
+           token=strtok(NULL,"/");
+           conf_sm[i].mux_tuple.src_mask=atoi(token);
+           } 
+        if (cfg_getstr(cfg_getnsec(cfg, "simplemux",i),"netdst")!=NULL)
+           {
+           token=strtok(cfg_getstr(cfg_getnsec(cfg, "simplemux",i),"netdst"),"/");
+           afi = ip_afi_from_char(token);
+           res=inet_pton(afi,token,&netipdstbin); 
+           ip_addr_init(&(conf_sm[i].mux_tuple.dst_net),&netipdstbin,afi);
+           token=strtok(NULL,"/");
+           conf_sm[i].mux_tuple.dst_mask=atoi(token);
+           } 
+        conf_sm[i].user_mtu=cfg_getint(cfg_getnsec(cfg, "simplemux",i),"mtu-user");
+        conf_sm[i].interface_mtu=cfg_getint(cfg_getnsec(cfg, "simplemux",i),"mtu-int");
+        conf_sm[i].limit_numpackets_tun=cfg_getint(cfg_getnsec(cfg, "simplemux",i),"num-pkt");
+        conf_sm[i].size_threshold=cfg_getint(cfg_getnsec(cfg, "simplemux",i),"threshold");
+        conf_sm[i].timeout=cfg_getint(cfg_getnsec(cfg, "simplemux",i),"timeout");
+        conf_sm[i].period=cfg_getint(cfg_getnsec(cfg, "simplemux",i),"period");
+        conf_sm[i].ROHC_mode=cfg_getint(cfg_getnsec(cfg, "simplemux",i),"ROHC-mode");
+
+		// Verify ROHC mode
+		if ( conf_sm[i].ROHC_mode < 0 ) {  // check ROHC option
+			conf_sm[i].ROHC_mode = 0;
+		} else if ( conf_sm[i].ROHC_mode > 2 ) { 
+			conf_sm[i].ROHC_mode = 2;
+		}
+
+    }
+/*SIMPLEMUX: simplemux data*/
+
 
     n = cfg_size(cfg, "database-mapping");
     for (i = 0; i < n; i++) {
@@ -951,6 +1243,28 @@ handle_config_file(char **lispdconf_conf_file)
             CFG_END()
     };
 
+/*SIMPLEMUX: label definition for simplemux configuration*/
+
+    static cfg_opt_t sm_opts[] = {
+            CFG_STR("lispsrc",           0, CFGF_NONE),
+            CFG_STR("lispdst",           0, CFGF_NONE),
+            CFG_STR("ipsrc",           0, CFGF_NONE),
+            CFG_STR("ipdst",           0, CFGF_NONE),
+            CFG_STR("netsrc",           0, CFGF_NONE),
+            CFG_STR("netdst",           0, CFGF_NONE),
+            CFG_INT("mtu-user",                  0, CFGF_NONE),
+            CFG_INT("mtu-int",                  0, CFGF_NONE),
+            CFG_INT("num-pkt",                  0, CFGF_NONE),
+            CFG_INT("threshold",                  0, CFGF_NONE),
+            CFG_INT("timeout",                  0, CFGF_NONE),
+            CFG_INT("period",                  0, CFGF_NONE),
+            CFG_INT("ROHC-mode",                  0, CFGF_NONE),
+            CFG_END()
+    };
+/*SIMPLEMUX: label definition for simplemux configuration*/
+
+
+
     static cfg_opt_t db_mapping_opts[] = {
             CFG_STR("eid-prefix",           0, CFGF_NONE),
             CFG_INT("iid",                  0, CFGF_NONE),
@@ -1077,6 +1391,9 @@ handle_config_file(char **lispdconf_conf_file)
             CFG_SEC("explicit-locator-path", elp_opts,              CFGF_MULTI),
             CFG_SEC("replication-list",     rle_opts,               CFGF_MULTI),
             CFG_SEC("multicast-info",       mc_info_opts,           CFGF_MULTI),
+/*SIMPLEMUX: label for simplemux configuration*/
+            CFG_SEC("simplemux",       sm_opts,           CFGF_MULTI),
+/*SIMPLEMUX: label for simplemux configuration*/
             CFG_END()
     };
 
@@ -1136,6 +1453,10 @@ handle_config_file(char **lispdconf_conf_file)
     if (mode) {
         if (strcmp(mode, "xTR") == 0) {
             ret=configure_xtr(cfg);
+/*SIMPLEMUX: new mode for simplemux*/
+        } else if (strcmp(mode, "xTRSM") == 0) {
+            ret=configure_xtrsm(cfg);
+/*SIMPLEMUX: end new mode for simplemux*/
         } else if (strcmp(mode, "MS") == 0) {
             ret=configure_ms(cfg);
         } else if (strcmp(mode, "RTR") == 0) {

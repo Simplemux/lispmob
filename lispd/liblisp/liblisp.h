@@ -36,6 +36,8 @@
 
 #define LISP_CONTROL_PORT               4342
 #define LISP_DATA_PORT                  4341
+/*SIMPLEMUX:  simplemux port*/
+#define MUX_DATA_PORT	4343
 
 
 lisp_msg_type_e lisp_msg_type(lbuf_t *);

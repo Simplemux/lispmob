@@ -17,7 +17,6 @@
  *
  */
 
-
 #include <errno.h>
 
 #include "tun_output.h"
@@ -30,6 +29,12 @@
 #include "../../lib/ttable.h"
 #include "../../lib/lmlog.h"
 #include "../../lib/sockets-util.h"
+
+/*SIMPLEMUX: definition*/
+#include "../../lib/simplemux.h"
+extern int numdsm;
+extern data_simplemux_t sm_conf[10];
+/*SIMPLEMUX: fin definition*/
 
 
 /* static buffer to receive packets */
@@ -181,6 +186,7 @@ tun_output_unicast(lbuf_t *b, packet_tuple_t *tuple)
 {
     fwd_info_t *fi;
     fwd_entry_t *fe;
+    int result = 1; // SIMPLEMUX
 
     fi = ttable_lookup(&ttable, tuple);
     if (!fi) {
@@ -205,15 +211,17 @@ tun_output_unicast(lbuf_t *b, packet_tuple_t *tuple)
         return(tun_forward_native(b, &tuple->dst_addr));
     }
 
-    LMLOG(LDBG_3,"OUTPUT: Sending encapsulated packet: RLOC %s -> %s\n",
-            lisp_addr_to_char(fe->srloc),
-            lisp_addr_to_char(fe->drloc));
-
-    lisp_data_encap(b, LISP_DATA_PORT, LISP_DATA_PORT, fe->srloc, fe->drloc);
-
-    return(send_raw_packet(*(fe->out_sock), lbuf_data(b), lbuf_size(b),
-               lisp_addr_ip(fe->drloc)));
-
+    /* SIMPLEMUX ***************************************/
+	if (numdsm  > 0) 
+        result = mux_tun_output_unicast(b,tuple, fe);
+    /* SIMPLEMUX ***************************************/
+        
+    if (result) { //Original
+		LMLOG(LDBG_3,"OUTPUT: Sending encapsulated packet: RLOC %s -> %s\n",lisp_addr_to_char(fe->srloc),lisp_addr_to_char(fe->drloc));
+		lisp_data_encap(b, LISP_DATA_PORT, LISP_DATA_PORT, fe->srloc, fe->drloc);
+		return(send_raw_packet(*(fe->out_sock), lbuf_data(b), lbuf_size(b),lisp_addr_ip(fe->drloc)));
+	}
+	return (result);
 }
 
 int

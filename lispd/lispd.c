@@ -26,6 +26,14 @@
 #include <time.h>
 
 #include "lispd.h"
+
+/********************************************/
+/**********  SIMPLEMUX  *********************/
+#include "lib/simplemux.h"
+extern int numdsm;
+/**********  SIMPLEMUX***********************/
+/********************************************/
+
 #ifdef OPENWRT
 #include "lispd_config_uci.h"
 #else
@@ -87,6 +95,8 @@ nonces_list_t *nat_ir_nonce = NULL;
 sockmstr_t *smaster = NULL;
 lisp_ctrl_dev_t *ctrl_dev;
 lisp_ctrl_t *lctrl;
+
+
 #ifdef VPNAPI
 int lispd_running;
 #endif
@@ -469,7 +479,15 @@ main(int argc, char **argv)
     smaster = sockmstr_create();
     lmtimers_init();
     ifaces_init();
-
+	
+	/********************************************/
+	/**********  SIMPLEMUX **********************/
+    /* initialize simplemux data */
+	numdsm=0;
+    muxed_init();
+	/**********  SIMPLEMUX **********************/
+	/********************************************/
+	
     /* create control. Only one instance for now */
     if ((lctrl = ctrl_create())==NULL){
         exit_cleanup();
@@ -508,7 +526,14 @@ main(int argc, char **argv)
     for (;;) {
         sockmstr_wait_on_all_read(smaster);
         sockmstr_process_all(smaster);
-        lmapi_loop(&lmapi_connection);
+
+		/********************************************/
+		/**********  SIMPLEMUX **********************/
+		muxed_timer_process_all();
+		/**********  SIMPLEMUX **********************/
+		/********************************************/
+
+		lmapi_loop(&lmapi_connection);
     }
 #else
     for (;;) {
@@ -620,10 +645,3 @@ JNIEXPORT void JNICALL Java_org_lispmob_noroot_LISPmob_1JNI_lispd_1exit
 }
 
 #endif
-
-/*
- * Editor modelines
- *
- * vi: set shiftwidth=4 tabstop=4 expandtab:
- * :indentSize=4:tabSize=4:noTabs=true:
- */

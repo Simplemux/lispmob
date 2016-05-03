@@ -27,10 +27,15 @@
 #include "../../lib/util.h"
 #include "../../liblisp/liblisp.h"
 #include "../../lib/lmlog.h"
+#include "../../lib/simplemux.h"
 
 /* static buffer to receive packets */
 static uint8_t pkt_recv_buf[MAX_IP_PKT_LEN+1];
 static lbuf_t pkt_buf;
+
+/*  SIMPLEMUX  ****************************/
+static uint16_t destination_port;
+/*****************************************/
 
 int
 tun_read_and_decap_pkt(int sock, lbuf_t *b)
@@ -58,20 +63,34 @@ tun_read_and_decap_pkt(int sock, lbuf_t *b)
 
     udph = pkt_pull_udp(b);
 
-    /* FILTER UDP: with input RAW UDP sockets, we receive all UDP packets,
+
+	/* FILTER UDP: with input RAW UDP sockets, we receive all UDP packets,
      * we only want LISP data ones */
-    if (ntohs(udph->dest) != LISP_DATA_PORT) {
+    
+	/* SIMPLEMUX ****************************************/
+    destination_port = ntohs(udph->dest);
+	if (ntohs(udph->dest) != LISP_DATA_PORT && ntohs(udph->dest) != MUX_DATA_PORT) {
         return (ERR_NOT_LISP);
     }
+     
+	/***************************************************/
 
-    lisp_hdr = lisp_data_pull_hdr(b);
+    /*original without modification (SIMPLEMUX)
+    if (ntohs(udph->dest) != LISP_DATA_PORT) {
+        return (ERR_NOT_LISP);
+    }*/
+
+	lisp_hdr = lisp_data_pull_hdr(b);
 
     /* RESET L3: prepare for output */
     lbuf_reset_l3(b);
 
     /* UPDATE IP TOS and TTL. Checksum is also updated for IPv4
      * NOTE: we always assume an IP payload*/
-    ip_hdr_set_ttl_and_tos(lbuf_data(b), ttl, tos);
+    
+	// *****************************PEPE *************************************
+	//ip_hdr_set_ttl_and_tos(lbuf_data(b), ttl, tos);  ////////////  SIMPLEMUX   
+	//************************************************************************
 
     LMLOG(LDBG_3, "%s", ip_src_and_dst_to_char(lbuf_l3(b),
             "INPUT (4341): Inner IP: %s -> %s"));
@@ -94,11 +113,28 @@ tun_process_input_packet(sock_t *sl)
         return (BAD);
     }
 
-    if ((write(tun_receive_fd, lbuf_l3(&pkt_buf), lbuf_size(&pkt_buf))) < 0) {
+	/* original without modification: SIMPLEMUX
+	if ((write(tun_receive_fd, lbuf_l3(&pkt_buf), lbuf_size(&pkt_buf))) < 0) {
         LMLOG(LDBG_2, "lisp_input: write error: %s\n ", strerror(errno));
-    }
+    }*/
 
-    return (GOOD);
+	/*   SIMPLEMUX *************************************************/
+	switch (destination_port)
+	{
+		case LISP_DATA_PORT:
+			if ((write(tun_receive_fd, lbuf_l3(&pkt_buf), lbuf_size(&pkt_buf))) < 0) {
+				LMLOG(LDBG_2, "lisp_input: write error: %s\n ", strerror(errno));
+			}
+			break;
+		case MUX_DATA_PORT:
+			demux_packets (lbuf_data(&pkt_buf), lbuf_size(&pkt_buf),tun_receive_fd);
+			break;
+		default:
+			break;
+	}
+	/*   SIMPLEMUX *************************************************/
+
+	return (GOOD);
 }
 
 int
@@ -121,4 +157,3 @@ tun_rtr_process_input_packet(struct sock *sl)
 
     return(GOOD);
 }
-

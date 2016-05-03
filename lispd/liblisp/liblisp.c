@@ -748,7 +748,7 @@ lisp_data_push_hdr(lbuf_t *b)
 void *
 lisp_data_encap(lbuf_t *b, int lp, int rp, lisp_addr_t *la, lisp_addr_t *ra)
 {
-    int ttl = 0, tos = 0;
+    int ttl = 128, tos = 0; //FIXME SIMPLEMUX
 
     /* read ttl and tos */
     ip_hdr_ttl_and_tos(lbuf_data(b), &ttl, &tos);

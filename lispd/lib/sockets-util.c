@@ -278,7 +278,9 @@ send_raw_packet(int socket, const void *pkt, int plen, ip_addr_t *dip)
         break;
     }
 
-    nbytes = sendto(socket, pkt, plen, 0, saddr, slen);
+    /*SIMPLEMUX: MSG_DONTROUTE only for direct routed*/
+    nbytes = sendto(socket, pkt, plen, MSG_DONTROUTE, saddr, slen);
+    /*nbytes = sendto(socket, pkt, plen, 0, saddr, slen);*/
     if (nbytes != plen) {
         LMLOG(LDBG_2, "send_raw_packet: send packet to %s using fail descriptor %d failed -> %s", ip_addr_to_char(dip),
                 socket, strerror(errno));
