@@ -1,3 +1,29 @@
+About this repository
+---------------------
+This repository is a fork of **lispmob**,
+with the addition of **Simplemux**, a method for multiplexing a number of packets together.
+
+   When small payloads are transmitted through a packet-switched
+   network, the resulting overhead may result significant.  This is
+   stressed in the case of LISP, where a number of headers are prepended
+   to a packet, as new headers have to be added to each packet.
+
+   The proposal consists of sending together a number of small packets,
+   which are in the buffer of a ITR, having the same ETR as destination,
+   into a single packet.  Therefore, they will share a single LISP
+   header, and therefore bandwidth savings can be obtained, and a
+   reduction in the overall number of packets sent to the network can be
+   achieved.
+
+Web page of lispmob: 
+http://www.openoverlayrouter.org/lispmob/
+
+IETF draft: "Header compression and multiplexing in LISP":
+https://datatracker.ietf.org/doc/draft-saldana-lisp-compress-mux/
+
+IETF draft: "Simplemux: A generic multiplexing protocol":
+https://datatracker.ietf.org/doc/draft-saldana-tsvwg-simplemux/
+
 Overview
 --------
 
