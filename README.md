@@ -433,7 +433,9 @@ To define this new feature is necessary fullfill the .conf file with the simplem
     
     
     operating-mode=xTRSM
+    
     ...
+    
     simplemux { 
        ipsrc=192.168.3.151 
        ipdst=192.168.3.151 
@@ -459,17 +461,19 @@ To define this new feature is necessary fullfill the .conf file with the simplem
 Several simplemux can be define.
 
 The meaning of each options is the follow: 
-ipsrc: IP source of packets to multiplex 
-ipdst: IP destination of packets to multiplex
-lispsrc: IP tunnel LISP source of packets to multiplex 
-lispdst: IP tunnel LISP destination of packets to multiplex 
-netsrc: Net source of packets to multiplex 
-netdst: Net destination of packets to multiplex 
-num-pkt: Maximun number of packets to multiplex 
-mtu-user: Maximun number of byte to multiplex 
-mtu-int: MTU redefine at the tunnel interface 
-threshold: Threshol number of byte to multiplex 
-period: Maximun delay time to multiplex in usec
-ROHC-mode: Compression mode at the header packets multiplexed
+    
+    ipsrc: IP source of packets to multiplex 
+    ipdst: IP destination of packets to multiplex
+    lispsrc: IP tunnel LISP source of packets to multiplex 
+    lispdst: IP tunnel LISP destination of packets to multiplex 
+    netsrc: Net source of packets to multiplex 
+    netdst: Net destination of packets to multiplex 
+    num-pkt: Maximun number of packets to multiplex 
+    mtu-user: Maximun number of byte to multiplex 
+    mtu-int: MTU redefine at the tunnel interface 
+    threshold: Threshol number of byte to multiplex 
+    period: Maximun delay time to multiplex in usec
+    ROHC-mode: Compression mode at the header packets multiplexed
+    
 
 Not all this options are neccesary simultaneously.
