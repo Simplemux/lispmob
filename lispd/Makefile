@@ -20,8 +20,8 @@ ERROR       = false
 
 
 ifeq "$(platform)" ""
-CFLAGS     += -Wall -std=gnu89 -g -I/usr/include/libxml2
-LIBS        = -lconfuse -lrt -lm -lzmq -lxml2
+CFLAGS     += -Wall -std=gnu89 -g -I/usr/include/libxml2 -I/usr/local/include/rohc 
+LIBS        = -lconfuse -lrt -lm -lzmq -lxml2 -lrohc_comp -lrohc -lrohc_common -lrohc_decomp
 else
 ifeq "$(platform)" "openwrt"
 CFLAGS     += -Wall -std=gnu89 -g -I/usr/include/libxml2 -DOPENWRT 
@@ -88,6 +88,7 @@ OBJS        = cmdline.o                  \
           lib/timers_utils.o             \
           lib/ttable.o                   \
           lib/util.o                     \
+          lib/simplemux.o                \
           iface_list.o                   \
           iface_mgmt.o                   \
           lispd.o                        \
