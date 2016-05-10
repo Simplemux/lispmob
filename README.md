@@ -444,6 +444,18 @@ simplemux { ... }
 
 Several simplemux can be define.
 
-The meaning of each options is the follow: ipsrc: IP source of packets to multiplex ipdst: IP destination of packets to multiplex lispsrc: IP tunnel LISP source of packets to multiplex lispdst: IP tunnel LISP destination of packets to multiplex netsrc: Net source of packets to multiplex netdst: Net destination of packets to multiplex num-pkt: Maximun number of packets to multiplex mtu-user: Maximun number of byte to multiplex mtu-int: MTU redefine at the tunnel interface threshold: Threshol number of byte to multiplex period: Maximun delay time to multiplex ROHC-mode: Compression mode at the header packets multiplexed
+The meaning of each options is the follow: 
+ipsrc: IP source of packets to multiplex 
+ipdst: IP destination of packets to multiplex 
+lispsrc: IP tunnel LISP source of packets to multiplex 
+lispdst: IP tunnel LISP destination of packets to multiplex 
+netsrc: Net source of packets to multiplex 
+netdst: Net destination of packets to multiplex 
+num-pkt: Maximun number of packets to multiplex 
+mtu-user: Maximun number of byte to multiplex 
+mtu-int: MTU redefine at the tunnel interface 
+threshold: Threshol number of byte to multiplex 
+period: Maximun delay time to multiplex 
+ROHC-mode: Compression mode at the header packets multiplexed
 
 Not all this options are neccesary simultaneously.
