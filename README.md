@@ -459,11 +459,8 @@ Several simplemux can be define.
 
 The meaning of each options is the follow: 
 ipsrc: IP source of packets to multiplex 
-
 ipdst: IP destination of packets to multiplex
-
 lispsrc: IP tunnel LISP source of packets to multiplex 
-
 lispdst: IP tunnel LISP destination of packets to multiplex 
 netsrc: Net source of packets to multiplex 
 netdst: Net destination of packets to multiplex 
