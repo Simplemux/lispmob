@@ -429,9 +429,11 @@ in addition to README.md this is the information to use SIMPLEMUX.
 There is a new feature that is the multiplexion at LISP tunnel.
 
 To define this new feature is necessary fullfill the .conf file with the simplemux data as follow:
+
+    
+    
     operating-mode=xTRSM
     ...
-    
     simplemux { 
        ipsrc=192.168.3.151 
        ipdst=192.168.3.151 
