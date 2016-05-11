@@ -468,11 +468,11 @@ The meaning of each options is the follow:
     lispdst: IP tunnel LISP destination of packets to multiplex 
     netsrc: Net source of packets to multiplex 
     netdst: Net destination of packets to multiplex 
-    num-pkt: Maximun number of packets to multiplex 
-    mtu-user: Maximun number of byte to multiplex 
+    num-pkt: Maximum number of packets to multiplex 
+    mtu-user: Maximum number of byte to multiplex 
     mtu-int: MTU redefine at the tunnel interface 
-    threshold: Threshol number of byte to multiplex 
-    period: Maximun delay time to multiplex in usec
+    threshold: Threshold number of byte to multiplex 
+    period: Maximum delay time to multiplex in usec
     ROHC-mode: Compression mode at the header packets multiplexed
     
 
