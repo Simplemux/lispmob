@@ -14,7 +14,10 @@ log-file               = /var/log/lispd.log
 # Define the type of LISP device LISPmob will operate as 
 #
 # operating-mode can be any of:
-# xTR, RTR, MN, MS
+# xTR, RTR, MN, MS, xTRSM
+#
+# xTRSM is the mode used for adding Simplemux functionalities. It uses the same parameters as 
+#xTR, but it adds the possibility of using Simplemux features.
 #
 operating-mode         = xTR
 
@@ -274,4 +277,39 @@ explicit-locator-path {
         probe       = <bool>
         lookup      = <bool>
     } 
+}
+
+###############################################
+#
+# Simplemux configuration
+#
+# If you add the next lines, every arriving packet will be compared with the conditions, 
+#and stopped to be multiplexed if the condition is accomplished
+#
+# ipsrc: IP source of packets to multiplex
+# ipdst: IP destination of packets to multiplex
+# lispsrc: IP tunnel LISP source of packets to multiplex
+# lispdst: IP tunnel LISP destination of packets to multiplex
+# netsrc: Net source of packets to multiplex
+# netdst: Net destination of packets to multiplex
+# num-pkt: Maximum number of packets to multiplex
+# mtu-user: Maximum number of bytes to send in a packet
+# mtu-int: MTU at the tunnel interface
+# threshold: Threshold of the number of bytes of the multiplexed packet. Once the threshold is reached, a packet is sent
+# period: Maximum time a packet can be stopped until it is sent
+# ROHC-mode: ROHC header compression mode: '0' No ROHC; '1' ROHC unidirectional; '2' ROHC bidirectional
+
+simplemux {
+        ipsrc		= <ip-address>
+        ipdst		= <ip-address>
+        lispsrc		= <ip-address>
+        lispdst		= <ip-address>
+        netsrc		= <ip-address/mask>
+        netdst		= <ip-address/mask>
+        num-pkt		= <int>
+        mtu-user	= <int>
+        mtu-int		= <int>
+        threshold       = <int>
+        period		= <int>
+        ROHC-mode	= '0', '1' or '2'
 }
