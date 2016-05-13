@@ -24,6 +24,43 @@ https://datatracker.ietf.org/doc/draft-saldana-lisp-compress-mux/
 IETF draft: "Simplemux: A generic multiplexing protocol":
 https://datatracker.ietf.org/doc/draft-saldana-tsvwg-simplemux/
 
+Configuring Simplemux parameters
+--------------------------------
+
+There is a new feature: multiplexing packets within the LISP tunnel.
+
+To define the parameters of this new feature it is necessary to modify the `lispd.conf` file (https://github.com/Simplemux/lispmob-with-simplemux/blob/master/lispd/lispd.conf.example) with the Simplemux data as follows:
+
+`operating-mode=xTRSM`
+
+...
+
+`simplemux { ipsrc=192.168.3.151 ipdst=192.168.3.151 lispsrc=155.210.157.151 lispdst=155.210.157.159 netsrc=192.168.3.0/24 netdst=192.168.7.0/24 num-pkt=10 mtu-user=1500 mtu-int=1500 threshold=600 period=100000 ROHC-mode=0 }`
+
+`simplemux { ... }`
+
+...
+
+`simplemux { ... }`
+
+Several simplemux tunnels can be defined.
+
+The meaning of each options is as follows:
+- `ipsrc`: IP source of packets to multiplex 
+- `ipdst`: IP destination of packets to multiplex 
+- `lispsrc`: IP tunnel LISP source of packets to multiplex 
+- `lispdst`: IP tunnel LISP destination of packets to multiplex 
+- `netsrc`: Net source of packets to multiplex 
+- `netdst`: Net destination of packets to multiplex 
+- `num-pkt`: Maximum number of packets to multiplex 
+- `mtu-user`: Maximum number of bytes to multiplex 
+- `mtu-int`: MTU at the tunnel interface 
+- `threshold`: Threshold of the number of bytes of the multiplexed packet. Once the threshold is reached, a packet is sent
+- `period`: Maximum time a packet can be stopped until it is sent 
+- `ROHC-mode`: ROHC header compression mode: '0' No ROHC; '1' ROHC unidirectional; '2' ROHC bidirectional
+
+Not all these options have to be defined simultaneously.
+
 Overview
 --------
 
