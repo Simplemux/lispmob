@@ -29,21 +29,26 @@ Configuring Simplemux parameters
 
 There is a new feature: multiplexing packets within the LISP tunnel.
 
-To define the parameters of this new feature it is necessary to modify the `lispd.conf` file (https://github.com/Simplemux/lispmob-with-simplemux/blob/master/lispd/lispd.conf.example) with the Simplemux data as follows:
+To define the parameters of this new feature it is necessary to modify the configuration file you use when you run `lispd -f configurationfile` (see an example in https://github.com/Simplemux/lispmob-with-simplemux/blob/master/lispd/lispd.conf.example, where the Simplemux configuration appears at the end):
 
 `operating-mode=xTRSM`
 
 ...
 
-`simplemux { ipsrc=192.168.3.151 ipdst=192.168.3.151 lispsrc=155.210.157.151 lispdst=155.210.157.159 netsrc=192.168.3.0/24 netdst=192.168.7.0/24 num-pkt=10 mtu-user=1500 mtu-int=1500 threshold=600 period=100000 ROHC-mode=0 }`
-
-`simplemux { ... }`
-
-...
-
-`simplemux { ... }`
-
-Several simplemux tunnels can be defined.
+    simplemux {
+        ipsrc=192.168.3.151 
+        ipdst=192.168.3.151
+        lispsrc=155.210.157.151
+        lispdst=155.210.157.159 
+        netsrc=192.168.3.0/24 
+        netdst=192.168.7.0/24 
+        num-pkt=10 
+        mtu-user=1500 
+        mtu-int=1500 
+        threshold=600 
+        period=100000 
+        ROHC-mode=0
+        }
 
 The meaning of each options is as follows:
 - `ipsrc`: IP source of packets to multiplex 
@@ -60,6 +65,8 @@ The meaning of each options is as follows:
 - `ROHC-mode`: ROHC header compression mode: '0' No ROHC; '1' ROHC unidirectional; '2' ROHC bidirectional
 
 Not all these options have to be defined simultaneously.
+
+Several simplemux tunnels can be defined.
 
 Overview
 --------
