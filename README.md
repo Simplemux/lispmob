@@ -24,6 +24,8 @@ https://datatracker.ietf.org/doc/draft-saldana-lisp-compress-mux/
 IETF draft: "Simplemux: A generic multiplexing protocol":
 https://datatracker.ietf.org/doc/draft-saldana-tsvwg-simplemux/
 
+This work has been partially financed by the Spanish Ministry of Economy and Competitiveness project TIN2015-64770-R, in cooperation with the European Regional Development Fund.
+
 Configuring Simplemux parameters
 --------------------------------
 
