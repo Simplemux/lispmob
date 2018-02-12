@@ -290,7 +290,11 @@ exit_cleanup(void) {
 
     htable_ptrs_destroy(ptrs_to_timers_ht);
     htable_nonces_destroy(nonces_ht);
-
+	/* SIMPLEMUX close config file */
+	if (config_file != NULL){
+        free(config_file);
+    }
+	/* SIMPLEMUX close config file */
     close_log_file();
 #ifndef VPNAPI
     LMLOG(LINF,"Exiting ...");
@@ -409,10 +413,12 @@ parse_config_file()
 {
     int err;
     err = handle_config_file(&config_file);
-    if (config_file != NULL){
+	/*SIMPLEMUX config file not freed so we can change it in Real-time */
+	/* Code added in exit_cleanup() */
+    /*if (config_file != NULL){
         free(config_file);
-    }
-
+    }*/
+	/*SIMPLEMUX config file not freed so we can change it in Real-time */
     return (err);
 }
 
@@ -466,6 +472,21 @@ initial_setup()
 int
 main(int argc, char **argv)
 {
+	/*SIMPLEMUX */
+	
+	int checkConfig = 500; // config file check period
+	double seconds;
+	struct stat sb;
+	time_t t_1;
+	time_t t_2;
+	if (stat(argv[2], &sb) == -1) {
+        perror("stat");
+        exit(EXIT_FAILURE);
+    }
+	t_1 = sb.st_mtime; // Time of last modification of config file
+	
+	/*SIMPLEMUX */
+	
     lisp_dev_type_e dev_type;
 
     initial_setup();
@@ -530,6 +551,26 @@ main(int argc, char **argv)
 		/********************************************/
 		/**********  SIMPLEMUX **********************/
 		muxed_timer_process_all();
+		if(checkConfig==0){
+			/* Check time of changes in conf file */
+				if (stat(argv[2], &sb) == -1) {
+					perror("stat");
+					exit(EXIT_FAILURE);
+				}
+				t_2 = sb.st_mtime; // last changes
+				seconds = difftime(t_2, t_1);
+				if (seconds > 0) { // changes done
+					LMLOG(LINF, "Conf file changed");
+					muxed_param_backup();
+					t_1 = t_2;
+					if (parse_config_file() != GOOD){
+						exit_cleanup();
+					}
+					muxed_param_changed ();
+				}
+				checkConfig = 500;
+		}
+		checkConfig--;
 		/**********  SIMPLEMUX **********************/
 		/********************************************/
 

@@ -89,6 +89,8 @@ typedef struct mux_tuple {
 
 
 typedef struct config_simplemux {
+	int port_dst;								// destination port
+	int port_src;								// source port
 	int ROHC_mode;							// it is 0 if ROHC is not used
 											// it is 1 for ROHC Unidirectional mode (headers are to be compressed/decompressed)
 											// it is 2 for ROHC Bidirectional Optimistic mode
@@ -128,6 +130,9 @@ typedef struct config_simplemux {
 void muxed_init();						// Initialize simplemux data
 
 void muxed_timer_process_all();			// Process the timers of all "simplemux data structs"
+
+void muxed_param_backup();  			// Save config parameters
+void muxed_param_changed();  			// Show in console the parameters that have changed
 
 int mux_tun_output_unicast (lbuf_t *b, packet_tuple_t *tuple, fwd_entry_t *fe);	// Multiplex the received packets from tun
 

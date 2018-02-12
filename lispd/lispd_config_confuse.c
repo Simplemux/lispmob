@@ -47,7 +47,7 @@ struct in_addr lispdstbin;
 struct in_addr netipsrcbin;
 struct in_addr netipdstbin;
 int numdsm;
-data_simplemux_t conf_sm[10];
+data_simplemux_t conf_sm[10],conf_sm_pre[10]; // FIXME: use realloc to allow more simplemux configs
 /*SIMPLEMUX: variables and includes for simplemux*/
 
 
@@ -779,7 +779,7 @@ configure_xtrsm(cfg_t *cfg)
 /*SIMPLEMUX: simplemux data*/
     n = cfg_size(cfg, "simplemux");
     numdsm=n;
-    if (n>10){n=10;LMLOG(LINF,"The simplemux data is more than 10, so will take only 10\n");}
+    if (n>10){n=10;LMLOG(LINF,"The simplemux data is more than 10, so will take only 10\n");} // FIXME: use realloc
     numdsm=n;
     for (i = 0; i < n; i++) 
     {
@@ -836,6 +836,9 @@ configure_xtrsm(cfg_t *cfg)
         conf_sm[i].period=cfg_getint(cfg_getnsec(cfg, "simplemux",i),"period");
         conf_sm[i].ROHC_mode=cfg_getint(cfg_getnsec(cfg, "simplemux",i),"ROHC-mode");
 
+        // FIXME: New parameters included, not used in MUX yet
+        conf_sm[i].port_dst=cfg_getint(cfg_getnsec(cfg, "simplemux",i),"port-dst");
+        conf_sm[i].port_src=cfg_getint(cfg_getnsec(cfg, "simplemux",i),"port-src");
 		// Verify ROHC mode
 		if ( conf_sm[i].ROHC_mode < 0 ) {  // check ROHC option
 			conf_sm[i].ROHC_mode = 0;
@@ -1259,6 +1262,9 @@ handle_config_file(char **lispdconf_conf_file)
             CFG_INT("timeout",                  0, CFGF_NONE),
             CFG_INT("period",                  0, CFGF_NONE),
             CFG_INT("ROHC-mode",                  0, CFGF_NONE),
+            // FIXME: New parameters included, not used in MUX yet
+            CFG_INT("port-dst",                  0, CFGF_NONE),
+            CFG_INT("port-src",                  0, CFGF_NONE),
             CFG_END()
     };
 /*SIMPLEMUX: label definition for simplemux configuration*/

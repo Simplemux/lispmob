@@ -15,7 +15,7 @@
 #include "../liblisp/liblisp.h"
 #include "lmlog.h"
 
-extern data_simplemux_t conf_sm[10];
+extern data_simplemux_t conf_sm[10],conf_sm_pre[10]; // save previous config
 extern int numdsm;
 
 /* compression */
@@ -1477,7 +1477,7 @@ void muxed_init()
 	if (log_file == NULL) 
 			LMLOG(LERR,"Error: cannot open the log file simplemux!\n");
 
-	for (i = 0 ; i < 10 ; i++) {
+	for (i = 0 ; i < 10 ; i++) { /* FIXME: use realloc to include more than 10 elements */
 	// Initialize ROCH mode  -----------------------------------------------------------------
 		
 	conf_sm[i].ROHC_mode = 0;	
@@ -1555,6 +1555,57 @@ int mux_output_unicast (lbuf_t *b, data_simplemux_t *data_simplemux)
 	return(send_raw_packet(data_simplemux->mux_tuple.out_sock, lbuf_data(b), lbuf_size(b),lisp_addr_ip(&(data_simplemux->mux_tuple.drloc))));
 }
 
+
+/**************************************************************************
+ *       Back up the previous config params               				  *
+ **************************************************************************/
+void muxed_param_backup ()
+{
+	conf_sm_pre[0] = conf_sm[0]; // save previous config
+}
+
+/**************************************************************************
+ *       Show the changes of conf_sm[0] "simplemux data struct"           *
+ **************************************************************************/
+void muxed_param_changed ()
+{
+	if(strcmp(ip_addr_to_char(&conf_sm_pre[0].mux_tuple.src_addr),ip_addr_to_char(&conf_sm[0].mux_tuple.src_addr)) != 0) {
+		LMLOG(LINF, "Ipsrc: %s",ip_addr_to_char(&conf_sm[0].mux_tuple.src_addr));
+	}
+	if(strcmp(ip_addr_to_char(&conf_sm_pre[0].mux_tuple.dst_addr),ip_addr_to_char(&conf_sm[0].mux_tuple.dst_addr)) != 0) {
+		LMLOG(LINF, "Ipdst: %s",ip_addr_to_char(&conf_sm[0].mux_tuple.dst_addr));
+	}
+	if(strcmp(ip_addr_to_char(&conf_sm_pre[0].mux_tuple.srloc.ip),ip_addr_to_char(&conf_sm[0].mux_tuple.srloc.ip)) != 0) {
+		LMLOG(LINF, "Lispsrc: %s",lisp_addr_to_char(&conf_sm[0].mux_tuple.srloc.ip));
+	}
+	if(strcmp(ip_addr_to_char(&conf_sm_pre[0].mux_tuple.drloc.ip),ip_addr_to_char(&conf_sm[0].mux_tuple.drloc.ip)) != 0) {
+		LMLOG(LINF, "Lispdst: %s",lisp_addr_to_char(&conf_sm[0].mux_tuple.drloc.ip));
+	}
+	if(strcmp(ip_addr_to_char(&conf_sm_pre[0].mux_tuple.src_net),ip_addr_to_char(&conf_sm[0].mux_tuple.src_net)) != 0) {
+		LMLOG(LINF, "Netsrc: %s",ip_addr_to_char(&conf_sm[0].mux_tuple.src_net));
+	}
+	if(strcmp(ip_addr_to_char(&conf_sm_pre[0].mux_tuple.dst_net),ip_addr_to_char(&conf_sm[0].mux_tuple.dst_net)) != 0) {
+		LMLOG(LINF, "Netdst: %s",ip_addr_to_char(&conf_sm[0].mux_tuple.dst_net));
+	}
+	if(conf_sm_pre[0].limit_numpackets_tun!=conf_sm[0].limit_numpackets_tun)
+		LMLOG(LINF, "Num-pkt: %d",conf_sm[0].limit_numpackets_tun);
+	if(conf_sm_pre[0].user_mtu!=conf_sm[0].user_mtu)
+		LMLOG(LINF, "Mtu-user: %d",conf_sm[0].user_mtu);
+	if(conf_sm_pre[0].interface_mtu!=conf_sm[0].interface_mtu)
+		LMLOG(LINF, "Mtu-int: %d",conf_sm[0].interface_mtu);
+	if(conf_sm_pre[0].size_threshold!=conf_sm[0].size_threshold)
+		LMLOG(LINF, "Threshold: %d",conf_sm[0].size_threshold);
+	if(conf_sm_pre[0].timeout!=conf_sm[0].timeout)
+		LMLOG(LINF, "Timeout: %d",conf_sm[0].timeout);
+	if(conf_sm_pre[0].period!=conf_sm[0].period)
+		LMLOG(LINF, "Period: %d",conf_sm[0].period);
+	if(conf_sm_pre[0].ROHC_mode!=conf_sm[0].ROHC_mode)
+		LMLOG(LINF, "ROHC-mode: %d",conf_sm[0].ROHC_mode);
+	if(conf_sm_pre[0].port_dst!=conf_sm[0].port_dst)
+		LMLOG(LINF, "Port-dst: %d",conf_sm[0].port_dst);
+	if(conf_sm_pre[0].port_src!=conf_sm[0].port_src)
+		LMLOG(LINF, "Port-src: %d",conf_sm[0].port_src);
+}	
 
 /**************************************************************************
  *       Process the timers of all "simplemux data structs"               *
