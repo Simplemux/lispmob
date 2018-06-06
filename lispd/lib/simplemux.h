@@ -128,6 +128,7 @@ typedef struct config_simplemux {
 
 
 void muxed_init();						// Initialize simplemux data
+void muxed_reset();						// Initialize simplemux data
 
 void muxed_timer_process_all();			// Process the timers of all "simplemux data structs"
 

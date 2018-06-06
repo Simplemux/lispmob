@@ -1476,50 +1476,138 @@ void muxed_init()
 	log_file = fopen(log_file_name, "w");
 	if (log_file == NULL) 
 			LMLOG(LERR,"Error: cannot open the log file simplemux!\n");
+	int afi,res;
+	struct in_addr ipbin;
+	
+	afi = ip_afi_from_char("0.0.0.0");
+    res=inet_pton(afi,"0.0.0.0",&ipbin);
 
 	for (i = 0 ; i < 10 ; i++) { /* FIXME: use realloc to include more than 10 elements */
-	// Initialize ROCH mode  -----------------------------------------------------------------
+		// Initialize ROCH mode  -----------------------------------------------------------------
+			
+		conf_sm[i].ROHC_mode = 0;
 		
-	conf_sm[i].ROHC_mode = 0;	
-	
-	// Initialize limits  -----------------------------------------------------------------
-	
-	conf_sm[i].limit_numpackets_tun = 0;		// limit of the number of tun packets that can be stored. it has to be smaller than MAXPKTS
-							// limit of the number of packets for triggering a muxed packet 
-
-	conf_sm[i].timeout = MAXTIMEOUT;		// timeout for triggering a muxed packet
-							// (microseconds) if a packet arrives and the timeout has expired (time from the  
-							// previous sending), the sending is triggered. default 100 seconds
-
-	conf_sm[i].period = MAXTIMEOUT;					//Period for triggering a muxed packet 
-	conf_sm[i].time_last_sent_in_microsec = GetTimeStamp();		// moment when the last multiplexed packet was sent
-
-	
-	conf_sm[i].interface_mtu = 0;				// the maximum transfer unit of the interface
-	conf_sm[i].user_mtu = 0;				// the MTU specified by the user (it must be <= interface_mtu)
-
-
-	conf_sm[i].size_threshold = 0;				// if the number of bytes stored is higher than this, a muxed packet is sent
+		// initialize addresses
+		ip_addr_init(&(conf_sm[i].mux_tuple.src_addr),&ipbin,afi);
+		ip_addr_init(&(conf_sm[i].mux_tuple.dst_addr),&ipbin,afi);
+		ip_addr_init(&(conf_sm[i].mux_tuple.srloc.ip),&ipbin,afi);
+		ip_addr_init(&(conf_sm[i].mux_tuple.drloc.ip),&ipbin,afi);
+		ip_addr_init(&(conf_sm[i].mux_tuple.src_net),&ipbin,afi);	
+		ip_addr_init(&(conf_sm[i].mux_tuple.dst_net),&ipbin,afi);
+		conf_sm[0].port_dst = 0;
+		conf_sm[0].port_src = 0;	
 		
-	// Variables for storing the packets to multiplex
-	conf_sm[i].size_muxed_packet = 0;		// acumulated size of the multiplexed packet
-	conf_sm[i].first_header_written = 0;		// it indicates if the first header has been written or not
+		// Initialize limits  -----------------------------------------------------------------
+		
+		conf_sm[i].limit_numpackets_tun = 0;		// limit of the number of tun packets that can be stored. it has to be smaller than MAXPKTS
+								// limit of the number of packets for triggering a muxed packet 
+
+		conf_sm[i].timeout = MAXTIMEOUT;		// timeout for triggering a muxed packet
+								// (microseconds) if a packet arrives and the timeout has expired (time from the  
+								// previous sending), the sending is triggered. default 100 seconds
+
+		conf_sm[i].period = MAXTIMEOUT;					//Period for triggering a muxed packet 
+		conf_sm[i].time_last_sent_in_microsec = GetTimeStamp();		// moment when the last multiplexed packet was sent
+
+		
+		conf_sm[i].interface_mtu = 0;				// the maximum transfer unit of the interface
+		conf_sm[i].user_mtu = 0;				// the MTU specified by the user (it must be <= interface_mtu)
 
 
-	conf_sm[i].num_pkts_stored_from_tun = 0;	// number of packets received and not sent from tun (stored)
+		conf_sm[i].size_threshold = 0;				// if the number of bytes stored is higher than this, a muxed packet is sent
+			
+		// Variables for storing the packets to multiplex
+		conf_sm[i].size_muxed_packet = 0;		// acumulated size of the multiplexed packet
+		conf_sm[i].first_header_written = 0;		// it indicates if the first header has been written or not
 
-	for (j = 0 ; j < MAXPKTS ; ++j) 
-		memset(conf_sm[i].protocol[j], 0, SIZE_PROTOCOL_FIELD*sizeof(unsigned char)); // protocol field of each packet
+
+		conf_sm[i].num_pkts_stored_from_tun = 0;	// number of packets received and not sent from tun (stored)
+
+		for (j = 0 ; j < MAXPKTS ; ++j) 
+			memset(conf_sm[i].protocol[j], 0, SIZE_PROTOCOL_FIELD*sizeof(unsigned char)); // protocol field of each packet
+		
+		memset(conf_sm[i].size_separators_to_multiplex, 0, MAXPKTS*sizeof(uint16_t));     	// stores the size of the Simplemux separator. It does not include the "Protocol" field
+
+		for (j = 0 ; j < MAXPKTS ; ++j) 
+			memset(conf_sm[i].separators_to_multiplex[j], 0, 3*sizeof(unsigned char));	// stores the header ('protocol' not included) received from tun, before sending it to the network
+		
+		memset(conf_sm[i].size_packets_to_multiplex, 0, MAXPKTS*sizeof(uint16_t));		// stores the size of the received packet
+		
+		for (j = 0 ; j < MAXPKTS ; ++j) 
+			memset(conf_sm[i].packets_to_multiplex[j], 0, BUFSIZE*sizeof(unsigned char));	// stores the packets received from tun, before storing it or sending it to the network
+	}
+	// End Initialize--------------------------------------------------------------------
+	//-----------------------------------------------------------------------------------
+}
+
+/*************************************************************************
+ * Function for muxed data reset *******************************
+ *************************************************************************/
+
+void muxed_reset() 
+{
+	int i,j; 
+
+	int afi,res;
+	struct in_addr ipbin;
 	
-	memset(conf_sm[i].size_separators_to_multiplex, 0, MAXPKTS*sizeof(uint16_t));     	// stores the size of the Simplemux separator. It does not include the "Protocol" field
+	afi = ip_afi_from_char("0.0.0.0");
+    res=inet_pton(afi,"0.0.0.0",&ipbin); 
 
-	for (j = 0 ; j < MAXPKTS ; ++j) 
-		memset(conf_sm[i].separators_to_multiplex[j], 0, 3*sizeof(unsigned char));	// stores the header ('protocol' not included) received from tun, before sending it to the network
-	
-	memset(conf_sm[i].size_packets_to_multiplex, 0, MAXPKTS*sizeof(uint16_t));		// stores the size of the received packet
-	
-	for (j = 0 ; j < MAXPKTS ; ++j) 
-		memset(conf_sm[i].packets_to_multiplex[j], 0, BUFSIZE*sizeof(unsigned char));	// stores the packets received from tun, before storing it or sending it to the network
+	for (i = 0 ; i < 10 ; i++) { /* FIXME: use realloc to include more than 10 elements */
+		// Initialize ROCH mode  -----------------------------------------------------------------
+			
+		conf_sm[i].ROHC_mode = 0;
+		
+		//reset addresses
+		ip_addr_init(&(conf_sm[i].mux_tuple.src_addr),&ipbin,afi);
+		ip_addr_init(&(conf_sm[i].mux_tuple.dst_addr),&ipbin,afi);
+		ip_addr_init(&(conf_sm[i].mux_tuple.srloc.ip),&ipbin,afi);
+		ip_addr_init(&(conf_sm[i].mux_tuple.drloc.ip),&ipbin,afi);
+		ip_addr_init(&(conf_sm[i].mux_tuple.src_net),&ipbin,afi);	
+		ip_addr_init(&(conf_sm[i].mux_tuple.dst_net),&ipbin,afi);
+		
+		conf_sm[0].port_dst = 0;
+		conf_sm[0].port_src = 0;
+		
+		// Initialize limits  -----------------------------------------------------------------
+		
+		conf_sm[i].limit_numpackets_tun = 0;		// limit of the number of tun packets that can be stored. it has to be smaller than MAXPKTS
+								// limit of the number of packets for triggering a muxed packet 
+
+		conf_sm[i].timeout = MAXTIMEOUT;		// timeout for triggering a muxed packet
+								// (microseconds) if a packet arrives and the timeout has expired (time from the  
+								// previous sending), the sending is triggered. default 100 seconds
+
+		conf_sm[i].period = MAXTIMEOUT;					//Period for triggering a muxed packet 
+		conf_sm[i].time_last_sent_in_microsec = GetTimeStamp();		// moment when the last multiplexed packet was sent
+
+		
+		conf_sm[i].interface_mtu = 0;				// the maximum transfer unit of the interface
+		conf_sm[i].user_mtu = 0;				// the MTU specified by the user (it must be <= interface_mtu)
+
+
+		conf_sm[i].size_threshold = 0;				// if the number of bytes stored is higher than this, a muxed packet is sent
+			
+		// Variables for storing the packets to multiplex
+		conf_sm[i].size_muxed_packet = 0;		// acumulated size of the multiplexed packet
+		conf_sm[i].first_header_written = 0;		// it indicates if the first header has been written or not
+
+
+		conf_sm[i].num_pkts_stored_from_tun = 0;	// number of packets received and not sent from tun (stored)
+
+		for (j = 0 ; j < MAXPKTS ; ++j) 
+			memset(conf_sm[i].protocol[j], 0, SIZE_PROTOCOL_FIELD*sizeof(unsigned char)); // protocol field of each packet
+		
+		memset(conf_sm[i].size_separators_to_multiplex, 0, MAXPKTS*sizeof(uint16_t));     	// stores the size of the Simplemux separator. It does not include the "Protocol" field
+
+		for (j = 0 ; j < MAXPKTS ; ++j) 
+			memset(conf_sm[i].separators_to_multiplex[j], 0, 3*sizeof(unsigned char));	// stores the header ('protocol' not included) received from tun, before sending it to the network
+		
+		memset(conf_sm[i].size_packets_to_multiplex, 0, MAXPKTS*sizeof(uint16_t));		// stores the size of the received packet
+		
+		for (j = 0 ; j < MAXPKTS ; ++j) 
+			memset(conf_sm[i].packets_to_multiplex[j], 0, BUFSIZE*sizeof(unsigned char));	// stores the packets received from tun, before storing it or sending it to the network
 	}
 	// End Initialize--------------------------------------------------------------------
 	//-----------------------------------------------------------------------------------
@@ -1560,51 +1648,131 @@ int mux_output_unicast (lbuf_t *b, data_simplemux_t *data_simplemux)
  *       Back up the previous config params               				  *
  **************************************************************************/
 void muxed_param_backup ()
-{
-	conf_sm_pre[0] = conf_sm[0]; // save previous config
+{	int i;
+
+	for (i = 0 ; i < 10 ; i++) { /* FIXME: use realloc to include more than 10 elements */
+	
+		conf_sm_pre[i] = conf_sm[i]; // save previous config
+		
+	}
 }
 
 /**************************************************************************
  *       Show the changes of conf_sm[0] "simplemux data struct"           *
  **************************************************************************/
 void muxed_param_changed ()
-{
-	if(strcmp(ip_addr_to_char(&conf_sm_pre[0].mux_tuple.src_addr),ip_addr_to_char(&conf_sm[0].mux_tuple.src_addr)) != 0) {
-		LMLOG(LINF, "Ipsrc: %s",ip_addr_to_char(&conf_sm[0].mux_tuple.src_addr));
+{	
+	int i;
+	
+	for (i = 0 ; i < 10 ; i++) { /* FIXME: use realloc to include more than 10 elements */
+	
+	int ruleChanged = 0;
+	
+	if(strcmp(ip_addr_to_char(&conf_sm_pre[i].mux_tuple.src_addr),ip_addr_to_char(&conf_sm[i].mux_tuple.src_addr)) != 0) {
+		LMLOG(LINF, "Rule %d changed",i);
+		ruleChanged = 1;
+		if(strcmp(ip_addr_to_char(&conf_sm[i].mux_tuple.src_addr),"0.0.0.0")!=0)
+			LMLOG(LINF, "\tIpsrc: %s",ip_addr_to_char(&conf_sm[i].mux_tuple.src_addr));
 	}
-	if(strcmp(ip_addr_to_char(&conf_sm_pre[0].mux_tuple.dst_addr),ip_addr_to_char(&conf_sm[0].mux_tuple.dst_addr)) != 0) {
-		LMLOG(LINF, "Ipdst: %s",ip_addr_to_char(&conf_sm[0].mux_tuple.dst_addr));
+	if(strcmp(ip_addr_to_char(&conf_sm_pre[i].mux_tuple.dst_addr),ip_addr_to_char(&conf_sm[i].mux_tuple.dst_addr)) != 0) {
+		if(ruleChanged == 0){
+			LMLOG(LINF, "Rule %d changed",i);
+			ruleChanged = 1;
+		}
+		if(strcmp(ip_addr_to_char(&conf_sm[i].mux_tuple.dst_addr),"0.0.0.0")!=0)
+			LMLOG(LINF, "\tIpdst: %s",ip_addr_to_char(&conf_sm[i].mux_tuple.dst_addr));
 	}
-	if(strcmp(ip_addr_to_char(&conf_sm_pre[0].mux_tuple.srloc.ip),ip_addr_to_char(&conf_sm[0].mux_tuple.srloc.ip)) != 0) {
-		LMLOG(LINF, "Lispsrc: %s",lisp_addr_to_char(&conf_sm[0].mux_tuple.srloc.ip));
+	if(strcmp(ip_addr_to_char(&conf_sm_pre[i].mux_tuple.srloc.ip),ip_addr_to_char(&conf_sm[i].mux_tuple.srloc.ip)) != 0) {
+		if(ruleChanged == 0){
+			LMLOG(LINF, "Rule %d changed",i);
+			ruleChanged = 1;
+		}
+		if(strcmp(ip_addr_to_char(&conf_sm[i].mux_tuple.srloc.ip),"0.0.0.0")!=0)
+			LMLOG(LINF, "\tLispsrc: %s",ip_addr_to_char(&conf_sm[i].mux_tuple.srloc.ip));
 	}
-	if(strcmp(ip_addr_to_char(&conf_sm_pre[0].mux_tuple.drloc.ip),ip_addr_to_char(&conf_sm[0].mux_tuple.drloc.ip)) != 0) {
-		LMLOG(LINF, "Lispdst: %s",lisp_addr_to_char(&conf_sm[0].mux_tuple.drloc.ip));
+	if(strcmp(ip_addr_to_char(&conf_sm_pre[i].mux_tuple.drloc.ip),ip_addr_to_char(&conf_sm[i].mux_tuple.drloc.ip)) != 0) {
+		if(ruleChanged == 0){
+			LMLOG(LINF, "Rule %d changed",i);
+			ruleChanged = 1;
+		}
+		if(strcmp(ip_addr_to_char(&conf_sm[i].mux_tuple.drloc.ip),"0.0.0.0")!=0)
+			LMLOG(LINF, "\tLispdst: %s",ip_addr_to_char(&conf_sm[i].mux_tuple.drloc.ip));
 	}
-	if(strcmp(ip_addr_to_char(&conf_sm_pre[0].mux_tuple.src_net),ip_addr_to_char(&conf_sm[0].mux_tuple.src_net)) != 0) {
-		LMLOG(LINF, "Netsrc: %s",ip_addr_to_char(&conf_sm[0].mux_tuple.src_net));
+	if(strcmp(ip_addr_to_char(&conf_sm_pre[i].mux_tuple.src_net),ip_addr_to_char(&conf_sm[i].mux_tuple.src_net)) != 0) {
+		if(ruleChanged == 0){
+			LMLOG(LINF, "Rule %d changed",i);
+			ruleChanged = 1;
+		}
+		if(strcmp(ip_addr_to_char(&conf_sm[i].mux_tuple.src_net),"0.0.0.0")!=0)
+			LMLOG(LINF, "\tNetsrc: %s",ip_addr_to_char(&conf_sm[i].mux_tuple.src_net));
 	}
-	if(strcmp(ip_addr_to_char(&conf_sm_pre[0].mux_tuple.dst_net),ip_addr_to_char(&conf_sm[0].mux_tuple.dst_net)) != 0) {
-		LMLOG(LINF, "Netdst: %s",ip_addr_to_char(&conf_sm[0].mux_tuple.dst_net));
+	if(strcmp(ip_addr_to_char(&conf_sm_pre[i].mux_tuple.dst_net),ip_addr_to_char(&conf_sm[i].mux_tuple.dst_net)) != 0) {
+		if(ruleChanged == 0){
+			LMLOG(LINF, "Rule %d changed",i);
+			ruleChanged = 1;
+		}
+		if(strcmp(ip_addr_to_char(&conf_sm[i].mux_tuple.dst_addr),"0.0.0.0")!=0)
+			LMLOG(LINF, "\tNetdst: %s",ip_addr_to_char(&conf_sm[i].mux_tuple.dst_net));
 	}
-	if(conf_sm_pre[0].limit_numpackets_tun!=conf_sm[0].limit_numpackets_tun)
-		LMLOG(LINF, "Num-pkt: %d",conf_sm[0].limit_numpackets_tun);
-	if(conf_sm_pre[0].user_mtu!=conf_sm[0].user_mtu)
-		LMLOG(LINF, "Mtu-user: %d",conf_sm[0].user_mtu);
-	if(conf_sm_pre[0].interface_mtu!=conf_sm[0].interface_mtu)
-		LMLOG(LINF, "Mtu-int: %d",conf_sm[0].interface_mtu);
-	if(conf_sm_pre[0].size_threshold!=conf_sm[0].size_threshold)
-		LMLOG(LINF, "Threshold: %d",conf_sm[0].size_threshold);
-	if(conf_sm_pre[0].timeout!=conf_sm[0].timeout)
-		LMLOG(LINF, "Timeout: %d",conf_sm[0].timeout);
-	if(conf_sm_pre[0].period!=conf_sm[0].period)
-		LMLOG(LINF, "Period: %d",conf_sm[0].period);
-	if(conf_sm_pre[0].ROHC_mode!=conf_sm[0].ROHC_mode)
-		LMLOG(LINF, "ROHC-mode: %d",conf_sm[0].ROHC_mode);
-	if(conf_sm_pre[0].port_dst!=conf_sm[0].port_dst)
-		LMLOG(LINF, "Port-dst: %d",conf_sm[0].port_dst);
-	if(conf_sm_pre[0].port_src!=conf_sm[0].port_src)
-		LMLOG(LINF, "Port-src: %d",conf_sm[0].port_src);
+	if(conf_sm_pre[i].limit_numpackets_tun!=conf_sm[i].limit_numpackets_tun){
+		if(ruleChanged == 0){
+			LMLOG(LINF, "Rule %d changed",i);
+			ruleChanged = 1;
+		}
+		LMLOG(LINF, "\tNum-pkt: %d",conf_sm[i].limit_numpackets_tun);
+	}
+	if(conf_sm_pre[i].user_mtu!=conf_sm[i].user_mtu){
+		if(ruleChanged == 0){
+			LMLOG(LINF, "Rule %d changed",i);
+			ruleChanged = 1;
+		}
+		LMLOG(LINF, "\tMtu-user: %d",conf_sm[i].user_mtu);
+	}
+	if(conf_sm_pre[i].interface_mtu!=conf_sm[i].interface_mtu){
+		if(ruleChanged == 0){
+			LMLOG(LINF, "Rule %d changed",i);
+			ruleChanged = 1;
+		}
+	LMLOG(LINF, "\tMtu-int: %d",conf_sm[i].interface_mtu);}
+	if(conf_sm_pre[i].size_threshold!=conf_sm[i].size_threshold){
+		if(ruleChanged == 0){
+			LMLOG(LINF, "Rule %d changed",i);
+			ruleChanged = 1;
+		}
+	LMLOG(LINF, "\tThreshold: %d",conf_sm[i].size_threshold);}
+	if(conf_sm_pre[i].timeout!=conf_sm[i].timeout){
+		if(ruleChanged == 0){
+			LMLOG(LINF, "Rule %d changed",i);
+			ruleChanged = 1;
+		}
+	LMLOG(LINF, "\tTimeout: %d",conf_sm[i].timeout);}
+	if(conf_sm_pre[i].period!=conf_sm[i].period){
+		if(ruleChanged == 0){
+			LMLOG(LINF, "Rule %d changed",i);
+			ruleChanged = 1;
+		}
+	LMLOG(LINF, "\tPeriod: %d",conf_sm[i].period);}
+	if(conf_sm_pre[i].ROHC_mode!=conf_sm[i].ROHC_mode){
+		if(ruleChanged == 0){
+			LMLOG(LINF, "Rule %d changed",i);
+			ruleChanged = 1;
+		}
+	LMLOG(LINF, "\tROHC-mode: %d",conf_sm[i].ROHC_mode);}
+	if(conf_sm_pre[i].port_dst!=conf_sm[i].port_dst){
+		if(ruleChanged == 0){
+			LMLOG(LINF, "Rule %d changed",i);
+			ruleChanged = 1;
+		}
+	LMLOG(LINF, "\tPort-dst: %d",conf_sm[i].port_dst);}
+	if(conf_sm_pre[i].port_src!=conf_sm[i].port_src){
+		if(ruleChanged == 0){
+			LMLOG(LINF, "Rule %d changed",i);
+			ruleChanged = 1;
+		}
+		LMLOG(LINF, "\tPort-src: %d",conf_sm[i].port_src);
+	}
+	}
+	LMLOG(LINF, "");
 }	
 
 /**************************************************************************
@@ -1681,10 +1849,10 @@ data_simplemux_t * lookup_mux_tuple (packet_tuple_t *tpl, fwd_entry_t *fe)
 
 	// IP source address AND IP destination address of the packet belong to one source net AND one destination net, respectively
 	for (i = 0 ; i < numdsm ;  ++i) {
-		src_sin_addr.s_addr = htonl(ntohl((tpl->src_addr.ip.addr.v4.s_addr) & (0xFFFFFFFF << (32 - conf_sm[i].mux_tuple.src_mask))));  // Get source net in struct in_addr format 
+		src_sin_addr.s_addr = htonl(ntohl((tpl->src_addr.ip.addr.v4.s_addr) & (0xFFFFFFFF >> (32 - conf_sm[i].mux_tuple.src_mask))));  // Get source net in struct in_addr format 
 		ip_addr_init (&src_net, &src_sin_addr, AF_INET); // Get source net in ip_address_t format 
 	
-		dst_sin_addr.s_addr = htonl(ntohl((tpl->dst_addr.ip.addr.v4.s_addr) & (0xFFFFFFFF << (32 - conf_sm[i].mux_tuple.dst_mask))));  // Get destination net in struct in_addr format 
+		dst_sin_addr.s_addr = htonl(ntohl((tpl->dst_addr.ip.addr.v4.s_addr) & (0xFFFFFFFF >> (32 - conf_sm[i].mux_tuple.dst_mask))));  // Get destination net in struct in_addr format 
 		ip_addr_init (&dst_net, &dst_sin_addr, AF_INET); // Get destination net in ip_address_t format 
 
 		if ( (ip_addr_cmp(&(conf_sm[i].mux_tuple.src_net),&src_net) == 0) &&
@@ -1694,14 +1862,13 @@ data_simplemux_t * lookup_mux_tuple (packet_tuple_t *tpl, fwd_entry_t *fe)
 	}
 //LMLOG(LINF,"ha pasado comp 2 redes and "   );
 
-	// IP source address AND IP destination address of the packet belong to one source net AND one destination net, respectively
+	// IP source address AND IP destination address of the packet belong to one source net OR one destination net, respectively
 	for (i = 0 ; i < numdsm ;  ++i) {
-		src_sin_addr.s_addr = htonl(ntohl((tpl->src_addr.ip.addr.v4.s_addr) & (0xFFFFFFFF << (32 - conf_sm[i].mux_tuple.src_mask))));  // Get source net in struct in_addr format 
+		src_sin_addr.s_addr = htonl(ntohl((tpl->src_addr.ip.addr.v4.s_addr) & (0xFFFFFFFF >> (32 - conf_sm[i].mux_tuple.src_mask))));  // Get source net in struct in_addr format 
 		ip_addr_init (&src_net, &src_sin_addr, AF_INET); // Get source net in ip_address_t format 
 	
-		dst_sin_addr.s_addr = htonl(ntohl((tpl->dst_addr.ip.addr.v4.s_addr) & (0xFFFFFFFF << (32 - conf_sm[i].mux_tuple.dst_mask))));  // Get destination net in struct in_addr format 
+		dst_sin_addr.s_addr = htonl(ntohl((tpl->dst_addr.ip.addr.v4.s_addr) & (0xFFFFFFFF >> (32 - conf_sm[i].mux_tuple.dst_mask))));  // Get destination net in struct in_addr format 
 		ip_addr_init (&dst_net, &dst_sin_addr, AF_INET); // Get destination net in ip_address_t format 
-
 		if ( (ip_addr_cmp(&(conf_sm[i].mux_tuple.src_net),&src_net) == 0) ||
 			 (ip_addr_cmp(&(conf_sm[i].mux_tuple.dst_net),&dst_net)) == 0)  {
 			return (&(conf_sm [i]));
@@ -1711,11 +1878,47 @@ data_simplemux_t * lookup_mux_tuple (packet_tuple_t *tpl, fwd_entry_t *fe)
   
 	// Dir fuente y dir destino del túnel 
 	for (i = 0 ; i < numdsm ;  ++i) {
-		if ( (lisp_addr_cmp(&(conf_sm[i].mux_tuple.srloc), fe->srloc) == 0) &&
-			 (lisp_addr_cmp(&(conf_sm[i].mux_tuple.drloc), fe->drloc) == 0)) {
+		if((strcmp(ip_addr_to_char(&(conf_sm[i].mux_tuple.srloc.ip)),lisp_addr_to_char(fe->srloc))==0) &&
+			(strcmp(ip_addr_to_char(&(conf_sm[i].mux_tuple.drloc.ip)),lisp_addr_to_char(fe->drloc))==0)) {
+		/*if ( (lisp_addr_cmp(&(conf_sm[i].mux_tuple.srloc), fe->srloc) == 0) &&
+			 (lisp_addr_cmp(&(conf_sm[i].mux_tuple.drloc), fe->drloc) == 0)) {*/
 			return (&(conf_sm [i]));
 		}
 	}
+	
+//LMLOG(LINF,"ha pasado comp 2 redes and "   );
+  
+	// Dir fuente y dir destino del túnel 
+	for (i = 0 ; i < numdsm ;  ++i) {
+		if((strcmp(ip_addr_to_char(&(conf_sm[i].mux_tuple.srloc.ip)),lisp_addr_to_char(fe->srloc))==0) ||
+			(strcmp(ip_addr_to_char(&(conf_sm[i].mux_tuple.drloc.ip)),lisp_addr_to_char(fe->drloc))==0)) {
+		/*if ( (lisp_addr_cmp(&(conf_sm[i].mux_tuple.srloc), fe->srloc) == 0) &&
+			 (lisp_addr_cmp(&(conf_sm[i].mux_tuple.drloc), fe->drloc) == 0)) {*/
+			return (&(conf_sm [i]));
+		}
+	}
+	
+//LMLOG(LINF,"ha pasado comp 2 redes or "   );
+  
+	// Puerto fuente y Puerto destino 
+	for (i = 0 ; i < numdsm ;  ++i) {
+		if (( conf_sm[i].port_src == tpl->src_port) &&
+			 (conf_sm[i].port_dst == tpl->dst_port)) {
+			return (&(conf_sm [i]));
+		}
+	}
+	
+//LMLOG(LINF,"ha pasado comp 2 puertos and "   );
+  
+	// Puerto fuente y Puerto destino 
+	for (i = 0 ; i < numdsm ;  ++i) {
+		if (( conf_sm[i].port_src == tpl->src_port) ||
+			 (conf_sm[i].port_dst == tpl->dst_port)) {
+			return (&(conf_sm [i]));
+		}
+	}
+
+//LMLOG(LINF,"ha pasado comp 2 puertos or "   );
 
 //LMLOG(LINF,"ha pasado todos los comp tunel"   );
 

@@ -777,6 +777,7 @@ configure_xtrsm(cfg_t *cfg)
 
 
 /*SIMPLEMUX: simplemux data*/
+
     n = cfg_size(cfg, "simplemux");
     numdsm=n;
     if (n>10){n=10;LMLOG(LINF,"The simplemux data is more than 10, so will take only 10\n");} // FIXME: use realloc
@@ -801,13 +802,15 @@ configure_xtrsm(cfg_t *cfg)
         if (cfg_getstr(cfg_getnsec(cfg, "simplemux",i),"lispsrc")!=NULL)
            {
            afi = ip_afi_from_char(cfg_getstr(cfg_getnsec(cfg, "simplemux",i),"lispsrc"));
-           res=inet_pton(afi,cfg_getstr(cfg_getnsec(cfg, "simplemux",i),"lispsrc"),&lispsrcbin); 
+           res=inet_pton(afi,cfg_getstr(cfg_getnsec(cfg, "simplemux",i),"lispsrc"),&lispsrcbin);
+           lisp_addr_set_lafi(&(conf_sm[i].mux_tuple.srloc),afi);
            ip_addr_init(&(conf_sm[i].mux_tuple.srloc.ip),&lispsrcbin,afi);
            } 
         if (cfg_getstr(cfg_getnsec(cfg, "simplemux",i),"lispdst")!=NULL)
            {
            afi = ip_afi_from_char(cfg_getstr(cfg_getnsec(cfg, "simplemux",i),"lispdst"));
-           res=inet_pton(afi,cfg_getstr(cfg_getnsec(cfg, "simplemux",i),"lispdst"),&lispdstbin); 
+           res=inet_pton(afi,cfg_getstr(cfg_getnsec(cfg, "simplemux",i),"lispdst"),&lispdstbin);
+           lisp_addr_set_lafi(&(conf_sm[i].mux_tuple.drloc),afi);
            ip_addr_init(&(conf_sm[i].mux_tuple.drloc.ip),&lispdstbin,afi);
            } 
         if (cfg_getstr(cfg_getnsec(cfg, "simplemux",i),"netsrc")!=NULL)
@@ -848,7 +851,6 @@ configure_xtrsm(cfg_t *cfg)
 
     }
 /*SIMPLEMUX: simplemux data*/
-
 
     n = cfg_size(cfg, "database-mapping");
     for (i = 0; i < n; i++) {
@@ -1262,9 +1264,8 @@ handle_config_file(char **lispdconf_conf_file)
             CFG_INT("timeout",                  0, CFGF_NONE),
             CFG_INT("period",                  0, CFGF_NONE),
             CFG_INT("ROHC-mode",                  0, CFGF_NONE),
-            // FIXME: New parameters included, not used in MUX yet
-            CFG_INT("port-dst",                  0, CFGF_NONE),
-            CFG_INT("port-src",                  0, CFGF_NONE),
+            CFG_INT("port-dst",                  99999, CFGF_NONE), //out of range
+            CFG_INT("port-src",                  99999, CFGF_NONE), //out of range
             CFG_END()
     };
 /*SIMPLEMUX: label definition for simplemux configuration*/

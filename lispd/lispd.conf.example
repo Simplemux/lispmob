@@ -19,7 +19,7 @@ log-file               = /var/log/lispd.log
 # xTRSM is the mode used for adding Simplemux functionalities. It uses the same parameters as 
 #xTR, but it adds the possibility of using Simplemux features.
 #
-operating-mode         = xTR
+operating-mode         = xTRSM
 
 # For the rest of this file you can delete the sections that does not apply to 
 # the LISP device selected in operating-mode
@@ -309,7 +309,9 @@ simplemux {
         num-pkt		= <int>
         mtu-user	= <int>
         mtu-int		= <int>
-        threshold       = <int>
+        threshold   = <int>
         period		= <int>
         ROHC-mode	= '0', '1' or '2'
+        port-src	= <int>
+        port-dst	= <int>
 }

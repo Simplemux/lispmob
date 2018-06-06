@@ -563,10 +563,21 @@ main(int argc, char **argv)
 					LMLOG(LINF, "Conf file changed");
 					muxed_param_backup();
 					t_1 = t_2;
+					
+					muxed_reset(); // reset conf_sm[i]
+
 					if (parse_config_file() != GOOD){
 						exit_cleanup();
 					}
+					
+					LMLOG(LINF, "****************************************");
+					LMLOG(LINF, "");
+					LMLOG(LINF, "Number of SM rules: %d",numdsm);
+					LMLOG(LINF, "");
+					
 					muxed_param_changed ();
+					
+					LMLOG(LINF, "****************************************");
 				}
 				checkConfig = 500;
 		}
