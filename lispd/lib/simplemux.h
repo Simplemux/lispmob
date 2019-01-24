@@ -85,17 +85,28 @@ typedef struct mux_tuple {
 	lisp_addr_t		srloc;			// LISP source address of tunnel to be used
 	lisp_addr_t		drloc;			// LISP destination address of tunnel to be used
 	int				out_sock;		// LISP socket of tunnel to be used
+ 
+ int IPSEC_policy;    //check protocol of each packet. Variable to decide which port is needed
 } mux_tuple_t;
 
 
 typedef struct config_simplemux {
-	int port_dst;								// destination port
+	
+  
+  int port_dst;								// destination port
 	int port_src;								// source port
 	int ROHC_mode;							// it is 0 if ROHC is not used
 											// it is 1 for ROHC Unidirectional mode (headers are to be compressed/decompressed)
 											// it is 2 for ROHC Bidirectional Optimistic mode
 											// it is 3 for ROHC Bidirectional Reliable mode (not implemented yet)
+ int IPSEC_mode; //it is 0 in order to not use IPsec at all
+                  //it is 1 in order to securize everything with IPsec through port 4344
+                  //2: to check if traffic is already secure or not
 
+ float percentage_packets_secure;  //minimun rate of packets in a muxed packet to introduce security or not. If calculated
+                                   //ratio is < percentage_packets_secure, then packets will be sent trough IPsec port
+  
+  
 	int limit_numpackets_tun;				// limit of the number of tun packets that can be stored. it has to be smaller than MAXPKTS
 											// limit of the number of packets for triggering a muxed packet 
 
@@ -128,7 +139,7 @@ typedef struct config_simplemux {
 
 
 void muxed_init();						// Initialize simplemux data
-void muxed_reset();						// Initialize simplemux data
+void muxed_reset();
 
 void muxed_timer_process_all();			// Process the timers of all "simplemux data structs"
 
@@ -137,7 +148,8 @@ void muxed_param_changed();  			// Show in console the parameters that have chan
 
 int mux_tun_output_unicast (lbuf_t *b, packet_tuple_t *tuple, fwd_entry_t *fe);	// Multiplex the received packets from tun
 
-int mux_packets(unsigned char *packet_in, uint32_t size_packet_in, data_simplemux_t *data_simplemux, unsigned char *out_muxed_packet, uint16_t *out_total_length); // Aggregation of packets (compress and multiplex)
+int mux_packets(unsigned char *packet_in, uint32_t size_packet_in, data_simplemux_t *data_simplemux, unsigned char *out_muxed_packet, uint16_t *out_total_length, int aux_protocol); 
+// Aggregation of packets (compress and multiplex)
 
 //int lookup_mux_tuple (packet_tuple_t *tpl, fwd_entry_t *fe, data_simplemux_t *data_simplemux);	// Lookup mux_tuple from packet tuple and forward entry
 data_simplemux_t * lookup_mux_tuple (packet_tuple_t *tpl, fwd_entry_t *fe); // Lookup mux_tuple from packet tuple and forward entry

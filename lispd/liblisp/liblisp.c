@@ -746,22 +746,28 @@ lisp_data_push_hdr(lbuf_t *b)
 }
 
 void *
-lisp_data_encap(lbuf_t *b, int lp, int rp, lisp_addr_t *la, lisp_addr_t *ra)
+lisp_data_encap(lbuf_t *b, int lp, int rp, lisp_addr_t *la, lisp_addr_t *ra, int ipsec_mode) 
 {
-    int ttl = 128, tos = 0; //FIXME SIMPLEMUX
+    if (ipsec_mode == 0) { //if no security is required, same encapsulation
+                            //Ipsec_mode is needed, to diferentiate in case mode=2, if security is needed or not
+      int ttl = 128, tos = 0; //FIXME SIMPLEMUX
 
-    /* read ttl and tos */
-    ip_hdr_ttl_and_tos(lbuf_data(b), &ttl, &tos);
+      /* read ttl and tos */
+      ip_hdr_ttl_and_tos(lbuf_data(b), &ttl, &tos);
 
-    /* push lisp data hdr */
-    lisp_data_push_hdr(b);
+      /* push lisp data hdr */
+      lisp_data_push_hdr(b);
 
-    /* push outer UDP and IP */
-    pkt_push_udp_and_ip(b, lp, rp, lisp_addr_ip(la), lisp_addr_ip(ra));
+      /* push outer UDP and IP */
+      pkt_push_udp_and_ip(b, lp, rp, lisp_addr_ip(la), lisp_addr_ip(ra));
 
-    ip_hdr_set_ttl_and_tos(lbuf_data(b), ttl, tos);
+      ip_hdr_set_ttl_and_tos(lbuf_data(b), ttl, tos);
 
     return(lbuf_data(b));
+    } else { //if port 4344 is required, only lisp header is needed (because of the use of udp socket)
+    lisp_data_push_hdr(b);
+       return(lbuf_data(b));
+    }
 }
 
 void *

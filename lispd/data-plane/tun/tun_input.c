@@ -68,8 +68,10 @@ tun_read_and_decap_pkt(int sock, lbuf_t *b)
      * we only want LISP data ones */
     
 	/* SIMPLEMUX ****************************************/
-    destination_port = ntohs(udph->dest);
-	if (ntohs(udph->dest) != LISP_DATA_PORT && ntohs(udph->dest) != MUX_DATA_PORT) {
+	
+        destination_port = ntohs(udph->dest);
+        
+	if (ntohs(udph->dest) != LISP_DATA_PORT && ntohs(udph->dest) != MUX_DATA_PORT && ntohs(udph->dest) != IPSEC_MUX_DATA_PORT) {
         return (ERR_NOT_LISP);
     }
      
@@ -123,11 +125,15 @@ tun_process_input_packet(sock_t *sl)
 	{
 		case LISP_DATA_PORT:
 			if ((write(tun_receive_fd, lbuf_l3(&pkt_buf), lbuf_size(&pkt_buf))) < 0) {
-				LMLOG(LDBG_2, "lisp_input: write error: %s\n ", strerror(errno));
+				LMLOG(LDBG_2, "lisp_input: write error: %s\n ", strerror(errno));        
 			}
 			break;
-		case MUX_DATA_PORT:
+		case MUX_DATA_PORT:       
 			demux_packets (lbuf_data(&pkt_buf), lbuf_size(&pkt_buf),tun_receive_fd);
+		  break;
+		case IPSEC_MUX_DATA_PORT :
+			LMLOG (LDBG_2, "ipsec_mux_input: tun_input: %s\n ", strerror(errno));
+			demux_packets (lbuf_data(&pkt_buf), lbuf_size(&pkt_buf),tun_receive_fd); 			
 			break;
 		default:
 			break;

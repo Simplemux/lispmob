@@ -276,8 +276,7 @@ send_raw_packet(int socket, const void *pkt, int plen, ip_addr_t *dip)
         slen = sizeof(struct sockaddr_in6);
         saddr = (struct sockaddr *)&sa6;
         break;
-    }
-
+    }    
     /*SIMPLEMUX: MSG_DONTROUTE only for direct routed*/
     nbytes = sendto(socket, pkt, plen, MSG_DONTROUTE, saddr, slen);
     /*nbytes = sendto(socket, pkt, plen, 0, saddr, slen);*/
@@ -319,9 +318,8 @@ send_datagram_packet (int sock, const void *packet, int packet_length,
     default:
         LMLOG(LDBG_2, "send_datagram_packet: Unknown afi %d",lisp_addr_ip_afi(addr_dest));
         return (BAD);
-    }
-
-    if (sendto(sock, packet, packet_length, 0, sock_addr, sock_addr_len) < 0){
+    }   
+    if (sendto(sock, packet, packet_length, MSG_DONTROUTE, sock_addr, sock_addr_len) < 0){
         LMLOG(LDBG_2, "send_datagram_packet: send failed %s.",strerror ( errno ));
         return (BAD);
     }

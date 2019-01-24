@@ -80,7 +80,6 @@ tun_forward_native(lbuf_t *b, lisp_addr_t *dst)
     return (ret);
 }
 
-
 static inline int
 is_lisp_packet(packet_tuple_t *tpl)
 {
@@ -95,7 +94,8 @@ is_lisp_packet(packet_tuple_t *tpl)
     if (tpl->dst_port != LISP_CONTROL_PORT
         && tpl->src_port != LISP_CONTROL_PORT
         && tpl->src_port != LISP_DATA_PORT
-        && tpl->dst_port != LISP_DATA_PORT) {
+        && tpl->dst_port != LISP_DATA_PORT		
+		) {
         return (FALSE);
     }
 
@@ -171,7 +171,7 @@ tun_output_multicast(lbuf_t *b, packet_tuple_t *tuple)
         if (out_sock == NULL){
             return (BAD);
         }
-        lisp_data_encap(b, LISP_DATA_PORT, LISP_DATA_PORT, src_rloc, dst_rloc);
+        lisp_data_encap(b, LISP_DATA_PORT, LISP_DATA_PORT, src_rloc, dst_rloc, 0); //variable 0, is because no security is needed  
 
         send_raw_packet(*out_sock, lbuf_data(b), lbuf_size(b),lisp_addr_ip(dst_rloc));
     }
@@ -218,7 +218,7 @@ tun_output_unicast(lbuf_t *b, packet_tuple_t *tuple)
         
     if (result) { //Original
 		LMLOG(LDBG_3,"OUTPUT: Sending encapsulated packet: RLOC %s -> %s\n",lisp_addr_to_char(fe->srloc),lisp_addr_to_char(fe->drloc));
-		lisp_data_encap(b, LISP_DATA_PORT, LISP_DATA_PORT, fe->srloc, fe->drloc);
+		lisp_data_encap(b, LISP_DATA_PORT, LISP_DATA_PORT, fe->srloc, fe->drloc, 0); //variable 0, is because no security is needed
 		return(send_raw_packet(*(fe->out_sock), lbuf_data(b), lbuf_size(b),lisp_addr_ip(fe->drloc)));
 	}
 	return (result);
@@ -245,7 +245,9 @@ tun_output(lbuf_t *b)
     }
     if (ip_addr_is_multicast(lisp_addr_ip(&tpl.dst_addr))) {
         tun_output_multicast(b, &tpl);
-    } else {
+    } 
+    
+    else {
         tun_output_unicast(b, &tpl);
     }
 

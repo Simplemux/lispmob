@@ -282,7 +282,8 @@ open_data_raw_input_socket(int afi)
     int sock = ERR_SOCKET;
     int dummy_sock = ERR_SOCKET; /* To avoid ICMP port unreacheable packets */
     int dummy_sock2 = ERR_SOCKET; /* To avoid ICMP port unreacheable packets */
-
+    int dummy_sock3 = ERR_SOCKET;
+  
     sock = open_udp_raw_socket(afi);
     if (sock == ERR_SOCKET){
         return (ERR_SOCKET);
@@ -292,11 +293,14 @@ open_data_raw_input_socket(int afi)
     dummy_sock = bind_socket(dummy_sock, afi, NULL, LISP_DATA_PORT);
     dummy_sock2 = open_udp_datagram_socket(afi);
     dummy_sock2 = bind_socket(dummy_sock2, afi, NULL, MUX_DATA_PORT);
+    dummy_sock3 = open_udp_datagram_socket(afi);
+    dummy_sock3 = bind_socket(dummy_sock3, afi, NULL, IPSEC_MUX_DATA_PORT);
 
     if (socket_conf_req_ttl_tos(sock,afi)!= GOOD){
         close(sock);
         close(dummy_sock);
         close(dummy_sock2);
+        close(dummy_sock3);
         return (ERR_SOCKET);
     }
 

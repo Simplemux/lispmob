@@ -36,9 +36,11 @@
 
 #define LISP_CONTROL_PORT               4342
 #define LISP_DATA_PORT                  4341
+
 /*SIMPLEMUX:  simplemux port*/
 #define MUX_DATA_PORT	4343
-
+/*SIMPLEMUX WITH IPSEC */
+#define IPSEC_MUX_DATA_PORT	4344
 
 lisp_msg_type_e lisp_msg_type(lbuf_t *);
 int lisp_msg_parse_addr(lbuf_t *, lisp_addr_t *);
@@ -86,7 +88,7 @@ void *lisp_msg_pull_auth_field(lbuf_t *b);
 
 void *lisp_data_push_hdr(lbuf_t *b);
 void *lisp_data_pull_hdr(lbuf_t *b);
-void *lisp_data_encap(lbuf_t *, int, int, lisp_addr_t *, lisp_addr_t *);
+void *lisp_data_encap(lbuf_t *, int, int, lisp_addr_t *, lisp_addr_t *, int); 
 
 static inline glist_t *laddr_list_new();
 static inline void laddr_list_init(glist_t *);

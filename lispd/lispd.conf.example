@@ -298,6 +298,13 @@ explicit-locator-path {
 # threshold: Threshold of the number of bytes of the multiplexed packet. Once the threshold is reached, a packet is sent
 # period: Maximum time a packet can be stopped until it is sent
 # ROHC-mode: ROHC header compression mode: '0' No ROHC; '1' ROHC unidirectional; '2' ROHC bidirectional
+# IPSEC-mode: '0' No security; '1' Always security; '2' Security depending if arriving packets to multiplex are already secure or not
+#if IPSEC-mode = 2, choose a min-rate-secure-packets. IPSEC-mode != 2, value of min-rate-secure-packets will not be considered 
+# min-rate-secure-packets: Minimun rate of packets secure required inside the muxed packet in order to not introduce security with IPsec
+#if the rate calculated before sending the muxed packet is less than min-rate-secure-packets, packets will be sent through IPsec port
+# if min-rate-secure-packets:0 , security port will be used only if all packets in the muxed packet are insecure.
+# if min-rate-secure-packets:1 , security port will be used even if one packet in the muxed packet is insecure.
+
 
 simplemux {
         ipsrc		= <ip-address>
@@ -314,4 +321,7 @@ simplemux {
         ROHC-mode	= '0', '1' or '2'
         port-src	= <int>
         port-dst	= <int>
+		IPSEC-mode 	= '0', '1' or '2'  
+		min-rate-secure-packets = [0,1]
+
 }

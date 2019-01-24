@@ -294,9 +294,10 @@ uint16_t predict_size_multiplexed_packet ( int num_packets, int single_prot, uns
 //	 1, if a muxed packet is built to be sent	
 //	 2, if a previous muxed packet is built to be sent because maximum size is reached. This function must be called again, using the same input parameters. 
 
-int mux_packets (unsigned char *packet_in, uint32_t size_packet_in, data_simplemux_t *data_simplemux, unsigned char *out_muxed_packet, uint16_t *out_total_length)
+int mux_packets (unsigned char *packet_in, uint32_t size_packet_in, data_simplemux_t *data_simplemux, unsigned char *out_muxed_packet, uint16_t *out_total_length, int aux_protocol)
+
 {
-//LMLOG(LINF, "entro en mux_packets");
+
 	// value to return by this function
 	int result = 0;											
 	
@@ -334,7 +335,10 @@ int mux_packets (unsigned char *packet_in, uint32_t size_packet_in, data_simplem
 	int single_protocol;						// it is 1 when the Single-Protocol-Bit of the first header is 1
 	int maximum_packet_length;					// the maximum lentgh of a packet. It may be 64 (first header) or 128 (non-first header)
 	int limit_length_two_bytes;					// the maximum length of a packet in order to express it in 2 bytes. It may be 8192 or 16384 (non-first header)
-
+ 
+ 
+  
+  
 	//indexes and counters
 	int l,j,k;
 
@@ -350,13 +354,25 @@ int mux_packets (unsigned char *packet_in, uint32_t size_packet_in, data_simplem
 											// it is 1 for ROHC Unidirectional mode (headers are to be compressed/decompressed)
 											// it is 2 for ROHC Bidirectional Optimistic mode
 											// it is 3 for ROHC Bidirectional Reliable mode (not implemented yet)
-
+  int IPSEC_mode; 
+                  //it is 0 in order to not use IPsec at all
+                  //it is 1 in order to securize everything with IPsec through port 4344
+                  //2: to check if traffic is already secure or not
+                  
+  float percentage_packets_secure; //minimun rate of packets in a muxed packet to introduce security or not. If calculated
+                                   //ratio is < percentage_packets_secure, then packets will be sent trough IPsec port 
+  
+  int IPSEC_policy; 
+  
+  static int counter_secure_packets = 0;
+  static int counter_non_secure_packets = 0;
+  
 	unsigned char ip_buffer[BUFSIZE];						// the buffer that will contain the IPv4 packet to compress
 	struct rohc_buf ip_packet = rohc_buf_init_empty(ip_buffer, BUFSIZE);	
 	unsigned char rohc_buffer[BUFSIZE];						// the buffer that will contain the resulting ROHC packet
 	struct rohc_buf rohc_packet = rohc_buf_init_empty(rohc_buffer, BUFSIZE);
 	rohc_status_t status;
-
+  
 
 	// Begin Initialize -----------------------------------------------------------------
 	//-----------------------------------------------------------------------------------
@@ -365,11 +381,15 @@ int mux_packets (unsigned char *packet_in, uint32_t size_packet_in, data_simplem
 
 	limit_numpackets_tun = data_simplemux->limit_numpackets_tun;		// limit of the number of tun packets that can be stored. it has to be smaller than MAXPKTS
 										// limit of the number of packets for triggering a muxed packet 
-
+	IPSEC_mode = data_simplemux->IPSEC_mode;
+  
+    percentage_packets_secure = data_simplemux->percentage_packets_secure;  
+    if (IPSEC_mode == 2) {
+    LMLOG (LDBG_1, "Percentage Packets Secure : %f\t ", percentage_packets_secure);
+  }
 	timeout = data_simplemux->timeout;					// timeout for triggering a muxed packet
 										// (microseconds) if a packet arrives and the timeout has expired (time from the  
 										// previous sending), the sending is triggered. default 100 seconds
-
 	period = data_simplemux->period;							//Period for triggering a muxed packet 
 	time_last_sent_in_microsec = data_simplemux->time_last_sent_in_microsec;		// moment when the last multiplexed packet was sent
 
@@ -440,7 +460,6 @@ int mux_packets (unsigned char *packet_in, uint32_t size_packet_in, data_simplem
 
 	LMLOG(LDBG_1, "Multiplexing policies: size threshold: %i. numpackets: %i. timeout: %d period: %d", size_threshold, limit_numpackets_tun, timeout, period);
 	
-
 	switch(ROHC_mode) {
 		case 0:
 			LMLOG (LDBG_1, "ROHC not activated");
@@ -455,6 +474,20 @@ int mux_packets (unsigned char *packet_in, uint32_t size_packet_in, data_simplem
 			LMLOG (LDBG_1, "ROHC Bidirectional Reliable Mode\n");
 			break;*/
 	}
+ 
+
+	switch(IPSEC_mode) {
+		case 0:
+			LMLOG (LDBG_1, "IPSEC mode 0");
+			break;
+		case 1:
+			LMLOG (LDBG_1, "IPSEC mode 1");
+			break;
+		case 2:
+			LMLOG (LDBG_1, "IPSEC mode 2");
+			break;		
+	}
+ 
 
 	// variables for storing the packets to multiplex
 	size_muxed_packet = data_simplemux->size_muxed_packet;						// acumulated size of the multiplexed packet
@@ -476,7 +509,6 @@ int mux_packets (unsigned char *packet_in, uint32_t size_packet_in, data_simplem
 	for (j = 0 ; j < MAXPKTS ; ++j) 
 		memcpy(packets_to_multiplex[j], data_simplemux->packets_to_multiplex[j], BUFSIZE*sizeof(unsigned char)); // stores the packets received from tun, before storing it or sending it to the network
 
-	
 	// End Initialize--------------------------------------------------------------------
 	//-----------------------------------------------------------------------------------
 
@@ -527,8 +559,26 @@ int mux_packets (unsigned char *packet_in, uint32_t size_packet_in, data_simplem
 				}
 			}
 
+
 		// the length of the packet is adequate
 		if ( drop_packet == 0 ) {
+  
+      
+      if (IPSEC_mode == 2) {
+       
+         if ((aux_protocol == 50) || (aux_protocol == 51)) {
+      
+         counter_secure_packets ++;
+         LMLOG(LDBG_1, "Secure packet with protocol: %d, counter_secure_packets: %d", aux_protocol, counter_secure_packets);
+           
+      } else {
+      
+         counter_non_secure_packets ++;
+         LMLOG(LDBG_1, "Non-secure packet with protocol: %d, counter_non_secure_packets: %d", aux_protocol, counter_non_secure_packets);
+      }
+      
+    }    
+
 
 			/******************** compress the headers if the ROHC option has been set ****************/
 			if ( ROHC_mode > 0 ) {
@@ -668,7 +718,19 @@ int mux_packets (unsigned char *packet_in, uint32_t size_packet_in, data_simplem
 				LMLOG(LDBG_2, "\n");			 
 				LMLOG(LDBG_1, "SENDING TRIGGERED: MTU size reached. Predicted size: %i bytes (over MTU)\n", predicted_size_muxed_packet + IPv4_HEADER_SIZE + UDP_HEADER_SIZE + LISP_HEADER_SIZE);
 
-
+       if (IPSEC_mode == 2) {
+        float rate = 0.0;
+        rate = ((float) counter_secure_packets/limit_numpackets_tun);
+        if ((rate < percentage_packets_secure ) || ((rate == 0) && (percentage_packets_secure == 0))){
+        LMLOG(LDBG_1, "calculated rate (secure packets/total packets) = %f, sending with IPSEC", rate);
+        data_simplemux->mux_tuple.IPSEC_policy = 1; 
+        } else {
+          LMLOG(LDBG_1, "calculated rate (secure packets/total packets) = %f, sending without IPSEC", rate);
+         data_simplemux->mux_tuple.IPSEC_policy = 0;      
+        }
+        counter_secure_packets = 0;
+        counter_non_secure_packets = 0;
+      }    
 
 				// add the Single Protocol Bit in the first header (the most significant bit)
 				// it is '1' if all the multiplexed packets belong to the same protocol
@@ -765,7 +827,6 @@ int mux_packets (unsigned char *packet_in, uint32_t size_packet_in, data_simplem
 				// End Update simplemux data --------------------------------------------------------
 				//-----------------------------------------------------------------------------------
 
-//LMLOG(LINF, "salgo de mux_packet I %d\n",result);
 				return(result);
 
 			}	/*** end check if size limit would be reached ***/
@@ -864,7 +925,6 @@ int mux_packets (unsigned char *packet_in, uint32_t size_packet_in, data_simplem
 					PrintByte(LDBG_2, 8, bits);
 					LMLOG(LDBG_2, "\n");
 				}	
-
 
 			// three-byte separator
 			} else {
@@ -978,8 +1038,26 @@ int mux_packets (unsigned char *packet_in, uint32_t size_packet_in, data_simplem
 				if (debug_level) {
 					LMLOG(LDBG_2, "\n");
 					LMLOG(LDBG_1, "SENDING TRIGGERED: ");
-					if (num_pkts_stored_from_tun == limit_numpackets_tun)
+					if (num_pkts_stored_from_tun == limit_numpackets_tun) {
 						LMLOG(LDBG_1, "num packet limit reached\n");
+                               
+            
+            if (IPSEC_mode == 2) {               
+             float rate = 0.0;
+             
+             rate = ((float) counter_secure_packets/limit_numpackets_tun);
+             if ((rate < percentage_packets_secure ) || ((rate == 0) && (percentage_packets_secure == 0))){
+                LMLOG(LDBG_1, "calculated rate (secure packets/total packets) = %f, sending with IPSEC", rate);
+                data_simplemux->mux_tuple.IPSEC_policy = 1; 
+             } else {
+                LMLOG(LDBG_1, "calculated rate (secure packets/total packets) = %f, sending without IPSEC", rate);
+                data_simplemux->mux_tuple.IPSEC_policy = 0;      
+             }
+                counter_secure_packets = 0;
+                counter_non_secure_packets = 0;    
+            }                                       
+          }   
+                          
 					if (size_muxed_packet > size_threshold)
 						LMLOG(LDBG_1," size threshold reached\n");
 					if (time_difference > timeout)
@@ -1048,6 +1126,21 @@ int mux_packets (unsigned char *packet_in, uint32_t size_packet_in, data_simplem
 			// calculate the time difference
 			time_difference = time_in_microsec - time_last_sent_in_microsec;		
 			
+    
+      if (IPSEC_mode == 2) {
+        float rate = 0.0;
+        rate = ((float) counter_secure_packets/limit_numpackets_tun);
+        if ((rate < percentage_packets_secure ) || ((rate == 0) && (percentage_packets_secure == 0))){
+        LMLOG(LDBG_1, "calculated rate (secure packets/total packets) = %f, sending with IPSEC", rate);
+        data_simplemux->mux_tuple.IPSEC_policy = 1; 
+        } else {
+          LMLOG(LDBG_1, "calculated rate (secure packets/total packets) = %f, sending without IPSEC", rate);
+         data_simplemux->mux_tuple.IPSEC_policy = 0;      
+        }
+        counter_secure_packets = 0;
+        counter_non_secure_packets = 0;
+      }
+            
 			// calculate if all the packets belong to the same protocol
 			single_protocol = 1;
 			for (k = 1; k < num_pkts_stored_from_tun ; k++) {
@@ -1067,7 +1160,6 @@ int mux_packets (unsigned char *packet_in, uint32_t size_packet_in, data_simplem
 				LMLOG(LDBG_1, " Writing %i packets to network: %i bytes\n", num_pkts_stored_from_tun, size_muxed_packet + IPv4_HEADER_SIZE + UDP_HEADER_SIZE + LISP_HEADER_SIZE);	
 			}
 
-
 			// Add the Single Protocol Bit in the first header (the most significant bit)
 			// It is 1 if all the multiplexed packets belong to the same protocol
 			if (single_protocol == 1) {
@@ -1076,17 +1168,14 @@ int mux_packets (unsigned char *packet_in, uint32_t size_packet_in, data_simplem
 			} else {
 				size_muxed_packet = size_muxed_packet + num_pkts_stored_from_tun;		// one byte per packet, corresponding to the 'protocol' field
 			}
-
 			// build the multiplexed packet
 			total_length = build_multiplexed_packet ( num_pkts_stored_from_tun, single_protocol, protocol, size_separators_to_multiplex, separators_to_multiplex, size_packets_to_multiplex, packets_to_multiplex, muxed_packet);
-
 			/************************************************************* RETURN ***********************************************************************/
 			// send the multiplexed packet  
 			memcpy(out_muxed_packet, muxed_packet,total_length);
 			*out_total_length = total_length;
 			//LMLOG(LINF," total_length periodo:%d",*out_total_length);
 			result = 1;
-
 			// write the log file
 			if ( log_file != NULL ) {
 				fprintf (log_file, "%"PRIu64"\tsent\tmuxed\t%i\t%lu\tto\t%s\t\t%i\tperiod\n", GetTimeStamp(), size_muxed_packet + IPv4_HEADER_SIZE + UDP_HEADER_SIZE + LISP_HEADER_SIZE, tun2net, 
@@ -1486,7 +1575,7 @@ void muxed_init()
 		// Initialize ROCH mode  -----------------------------------------------------------------
 			
 		conf_sm[i].ROHC_mode = 0;
-		
+		conf_sm[i].IPSEC_mode = 0;
 		// initialize addresses
 		ip_addr_init(&(conf_sm[i].mux_tuple.src_addr),&ipbin,afi);
 		ip_addr_init(&(conf_sm[i].mux_tuple.dst_addr),&ipbin,afi);
@@ -1509,7 +1598,10 @@ void muxed_init()
 		conf_sm[i].period = MAXTIMEOUT;					//Period for triggering a muxed packet 
 		conf_sm[i].time_last_sent_in_microsec = GetTimeStamp();		// moment when the last multiplexed packet was sent
 
-		
+		conf_sm[i].IPSEC_mode = 0; //Mode for security
+   	conf_sm[i].mux_tuple.IPSEC_policy = 0; 
+    conf_sm[i].percentage_packets_secure = 0; //Minimun ratio of packets 
+    
 		conf_sm[i].interface_mtu = 0;				// the maximum transfer unit of the interface
 		conf_sm[i].user_mtu = 0;				// the MTU specified by the user (it must be <= interface_mtu)
 
@@ -1543,7 +1635,7 @@ void muxed_init()
 /*************************************************************************
  * Function for muxed data reset *******************************
  *************************************************************************/
-
+//AÑADIDO RUBÉN
 void muxed_reset() 
 {
 	int i,j; 
@@ -1558,7 +1650,7 @@ void muxed_reset()
 		// Initialize ROCH mode  -----------------------------------------------------------------
 			
 		conf_sm[i].ROHC_mode = 0;
-		
+    conf_sm[i].IPSEC_mode = 0; 
 		//reset addresses
 		ip_addr_init(&(conf_sm[i].mux_tuple.src_addr),&ipbin,afi);
 		ip_addr_init(&(conf_sm[i].mux_tuple.dst_addr),&ipbin,afi);
@@ -1582,7 +1674,9 @@ void muxed_reset()
 		conf_sm[i].period = MAXTIMEOUT;					//Period for triggering a muxed packet 
 		conf_sm[i].time_last_sent_in_microsec = GetTimeStamp();		// moment when the last multiplexed packet was sent
 
-		
+		conf_sm[i].IPSEC_mode = 0;
+    conf_sm[i].mux_tuple.IPSEC_policy = 0; 
+    conf_sm[i].percentage_packets_secure = 0; 
 		conf_sm[i].interface_mtu = 0;				// the maximum transfer unit of the interface
 		conf_sm[i].user_mtu = 0;				// the MTU specified by the user (it must be <= interface_mtu)
 
@@ -1613,40 +1707,79 @@ void muxed_reset()
 	//-----------------------------------------------------------------------------------
 }
 
+
+/**************************************************************************
+ *       SOCKET FOR IPSEC                                     *  
+ **************************************************************************/
+int socket_for_ipsec ( data_simplemux_t *data_simplemux, const void *pkt, int plen, ip_addr_t *dip) {
+
+  int socket_ipsec;
+  int result_bind;
+  int src_port = IPSEC_MUX_DATA_PORT;
+  int port_dest = IPSEC_MUX_DATA_PORT;
+  lisp_addr_t *addr;
+  lisp_addr_t *addr_dest;
+   
+  socket_ipsec = open_udp_datagram_socket(AF_INET);  
+  addr = &(data_simplemux-> mux_tuple.srloc);
+  addr_dest = &(data_simplemux-> mux_tuple.drloc);
+  
+  result_bind = bind_socket (socket_ipsec, AF_INET, addr ,src_port);
+  
+  if (result_bind != 0)
+    LMLOG(LDBG_1, "bind_socket: %s",strerror(errno));      
+  else 
+    LMLOG(LDBG_1, "bind_socket: Binded socket %d to source address %s and port %d",socket_ipsec, lisp_addr_to_char(&(data_simplemux->mux_tuple.srloc)),src_port);
+
+  int send = send_datagram_packet (socket_ipsec, pkt, plen, addr_dest, port_dest);
+  close (socket_ipsec);
+  LMLOG(LDBG_1, "socket ipsec %d closed", socket_ipsec);
+  
+}
+
 /**************************************************************************
  *       Send multiplexed packet encapsulated in LISP packet              *
  **************************************************************************/
 
 int mux_output_unicast (lbuf_t *b, data_simplemux_t *data_simplemux)
-{
-	//LMLOG(LINF,"OUTPUT: Sending encapsulated packet: RLOC %s -> %s, port:%d\n",lisp_addr_to_char(&(data_simplemux->mux_tuple.srloc)),lisp_addr_to_char(&(data_simplemux->mux_tuple.drloc)),sizeof(b));
-
-	lisp_data_encap(b, MUX_DATA_PORT, MUX_DATA_PORT, &(data_simplemux->mux_tuple.srloc), &(data_simplemux->mux_tuple.drloc));
-
-/*    // read ttl and tos
-    ip_hdr_ttl_and_tos(lbuf_data(b), &ttl, &tos);
-
-	LMLOG(LINF,"OUTPUT: entro en lisp_data_push_hdr\n");
-    // push lisp data hdr 
-    lisp_data_push_hdr(b);
-	LMLOG(LINF,"OUTPUT: paso el lisp_data_push_hdr\n");
-
-    // push outer UDP and IP 
-    pkt_push_udp_and_ip(b, MUX_DATA_PORT, MUX_DATA_PORT, lisp_addr_ip(&(data_simplemux->mux_tuple.srloc)), lisp_addr_ip(&(data_simplemux->mux_tuple.drloc)));
-	LMLOG(LINF,"OUTPUT: paso el pkt_push_udp_and_ip\n");
-    //pkt_push_udp_and_ip(b, lp, rp, lisp_addr_ip(la), lisp_addr_ip(ra));
-
-    ip_hdr_set_ttl_and_tos(lbuf_data(b), ttl, tos);
-	LMLOG(LINF,"OUTPUT: paso el set_ttl_and_tos\n");
-
-	*/
-	return(send_raw_packet(data_simplemux->mux_tuple.out_sock, lbuf_data(b), lbuf_size(b),lisp_addr_ip(&(data_simplemux->mux_tuple.drloc))));
+{	
+		int IPSEC_mode = data_simplemux->IPSEC_mode;
+	
+	switch (IPSEC_mode){
+		
+		case 0: //No security needed 
+		  LMLOG(LINF,"Sending packet through port 4343");    
+			lisp_data_encap(b, MUX_DATA_PORT, MUX_DATA_PORT, &(data_simplemux->mux_tuple.srloc), &(data_simplemux->mux_tuple.drloc), IPSEC_mode);
+      return(send_raw_packet(data_simplemux->mux_tuple.out_sock, lbuf_data(b), lbuf_size(b),lisp_addr_ip(&(data_simplemux->mux_tuple.drloc))));
+			break;
+			
+		case 1: //Always need security
+      LMLOG(LINF,"Sending packet through port 4344");     
+			lisp_data_encap(b, IPSEC_MUX_DATA_PORT, IPSEC_MUX_DATA_PORT, &(data_simplemux->mux_tuple.srloc), &(data_simplemux->mux_tuple.drloc), IPSEC_mode); 
+      return (socket_for_ipsec(data_simplemux, lbuf_data(b), lbuf_size(b),lisp_addr_ip(&(data_simplemux->mux_tuple.drloc)))); 
+			break;
+			
+		case 2: //Analize if security is needed
+			
+		  if ((data_simplemux->mux_tuple.IPSEC_policy)== 0) { 
+        IPSEC_mode=0;
+        LMLOG(LINF,"Sending packet through port 4343");
+				lisp_data_encap(b, MUX_DATA_PORT, MUX_DATA_PORT, &(data_simplemux->mux_tuple.srloc), &(data_simplemux->mux_tuple.drloc),IPSEC_mode);
+        return(send_raw_packet(data_simplemux->mux_tuple.out_sock, lbuf_data(b), lbuf_size(b),lisp_addr_ip(&(data_simplemux->mux_tuple.drloc))));
+			} else { //Packet needs security
+        IPSEC_mode = 1;
+        LMLOG(LINF,"Sending packet through port 4344");
+				lisp_data_encap(b, IPSEC_MUX_DATA_PORT, IPSEC_MUX_DATA_PORT, &(data_simplemux->mux_tuple.srloc), &(data_simplemux->mux_tuple.drloc),IPSEC_mode);
+        return (socket_for_ipsec(data_simplemux, lbuf_data(b), lbuf_size(b),lisp_addr_ip(&(data_simplemux->mux_tuple.drloc)))); 
+			}
+			break;		
+	}
 }
+  
+///**************************************************************************
+// *       Back up the previous config params               				  *
+// **************************************************************************/
 
-
-/**************************************************************************
- *       Back up the previous config params               				  *
- **************************************************************************/
 void muxed_param_backup ()
 {	int i;
 
@@ -1758,6 +1891,21 @@ void muxed_param_changed ()
 			ruleChanged = 1;
 		}
 	LMLOG(LINF, "\tROHC-mode: %d",conf_sm[i].ROHC_mode);}
+ 
+ if(conf_sm_pre[i].IPSEC_mode!=conf_sm[i].IPSEC_mode){
+		if(ruleChanged == 0){
+			LMLOG(LINF, "Rule %d changed",i);
+			ruleChanged = 1;
+		}
+	LMLOG(LINF, "\tIPSEC_mode: %d",conf_sm[i].IPSEC_mode);}
+ 
+ if(conf_sm_pre[i].percentage_packets_secure!=conf_sm[i].percentage_packets_secure){
+		if(ruleChanged == 0){
+			LMLOG(LINF, "Rule %d changed",i);
+			ruleChanged = 1;
+		}
+	LMLOG(LINF, "\tRate packets secure: %f",conf_sm[i].percentage_packets_secure);} 
+  
 	if(conf_sm_pre[i].port_dst!=conf_sm[i].port_dst){
 		if(ruleChanged == 0){
 			LMLOG(LINF, "Rule %d changed",i);
@@ -1790,7 +1938,6 @@ void muxed_timer_process_all ()
 	lbuf_t lisp_buffer;							// buffer lisp to send mux packet	
 	uint32_t lisp_data_length = 0;					// length of the built multiplexed packet
 
-
 	time_in_microsec = GetTimeStamp();
 	for (i = 0 ; i < numdsm ;  ++i) {
 		if (conf_sm[i].period < (time_in_microsec - conf_sm[i].time_last_sent_in_microsec)) {
@@ -1798,7 +1945,8 @@ void muxed_timer_process_all ()
 		              time_in_microsec, conf_sm[i].time_last_sent_in_microsec, conf_sm[i].period, i);
                         */
 			//if (mux_packets (NULL, 0, &(conf_sm[i]), out_muxed_packet, (uint16_t *)(&out_total_length)) == 1){	
-			if (mux_packets (NULL, 0, &(conf_sm[i]), out_muxed_packet, &out_total_length) == 1){	
+        
+			if (mux_packets (NULL, 0, &(conf_sm[i]), out_muxed_packet, &out_total_length, 0) == 1){	
 				//Build lisp buffer	
 				//LMLOG(LINF," total_length periodo:%d",out_total_length);
 		 		lbuf_use_stack(&lisp_buffer, &lisp_mux_buffer, (uint32_t)BUFSIZE);
@@ -1807,17 +1955,19 @@ void muxed_timer_process_all ()
 				lisp_data_length = out_total_length;
 				lbuf_set_size(&lisp_buffer, lisp_data_length);				
 				//Encapsulate output multiplexed packet in a LISP packet and sent it
+       
+
 				mux_output_unicast(&lisp_buffer,&conf_sm[i]);  
 			}
 		}
 	}
 }
 
-
-/**************************************************************************
- *        Lookup mux_tuple from packet tuple and forward entry            *
- **************************************************************************/
-
+//
+///**************************************************************************
+// *        Lookup mux_tuple from packet tuple and forward entry            *
+// **************************************************************************/
+//
 //int lookup_mux_tuple (packet_tuple_t *tpl, fwd_entry_t *fe, data_simplemux_t *data_simplemux)
 data_simplemux_t * lookup_mux_tuple (packet_tuple_t *tpl, fwd_entry_t *fe)
 {
@@ -1849,10 +1999,10 @@ data_simplemux_t * lookup_mux_tuple (packet_tuple_t *tpl, fwd_entry_t *fe)
 
 	// IP source address AND IP destination address of the packet belong to one source net AND one destination net, respectively
 	for (i = 0 ; i < numdsm ;  ++i) {
-		src_sin_addr.s_addr = htonl(ntohl((tpl->src_addr.ip.addr.v4.s_addr) & (0xFFFFFFFF >> (32 - conf_sm[i].mux_tuple.src_mask))));  // Get source net in struct in_addr format 
+		src_sin_addr.s_addr = htonl(ntohl((tpl->src_addr.ip.addr.v4.s_addr) & (0xFFFFFFFF << (32 - conf_sm[i].mux_tuple.src_mask))));  // Get source net in struct in_addr format 
 		ip_addr_init (&src_net, &src_sin_addr, AF_INET); // Get source net in ip_address_t format 
 	
-		dst_sin_addr.s_addr = htonl(ntohl((tpl->dst_addr.ip.addr.v4.s_addr) & (0xFFFFFFFF >> (32 - conf_sm[i].mux_tuple.dst_mask))));  // Get destination net in struct in_addr format 
+		dst_sin_addr.s_addr = htonl(ntohl((tpl->dst_addr.ip.addr.v4.s_addr) & (0xFFFFFFFF << (32 - conf_sm[i].mux_tuple.dst_mask))));  // Get destination net in struct in_addr format 
 		ip_addr_init (&dst_net, &dst_sin_addr, AF_INET); // Get destination net in ip_address_t format 
 
 		if ( (ip_addr_cmp(&(conf_sm[i].mux_tuple.src_net),&src_net) == 0) &&
@@ -1862,13 +2012,14 @@ data_simplemux_t * lookup_mux_tuple (packet_tuple_t *tpl, fwd_entry_t *fe)
 	}
 //LMLOG(LINF,"ha pasado comp 2 redes and "   );
 
-	// IP source address AND IP destination address of the packet belong to one source net OR one destination net, respectively
+	// IP source address AND IP destination address of the packet belong to one source net AND one destination net, respectively
 	for (i = 0 ; i < numdsm ;  ++i) {
-		src_sin_addr.s_addr = htonl(ntohl((tpl->src_addr.ip.addr.v4.s_addr) & (0xFFFFFFFF >> (32 - conf_sm[i].mux_tuple.src_mask))));  // Get source net in struct in_addr format 
+		src_sin_addr.s_addr = htonl(ntohl((tpl->src_addr.ip.addr.v4.s_addr) & (0xFFFFFFFF << (32 - conf_sm[i].mux_tuple.src_mask))));  // Get source net in struct in_addr format 
 		ip_addr_init (&src_net, &src_sin_addr, AF_INET); // Get source net in ip_address_t format 
 	
-		dst_sin_addr.s_addr = htonl(ntohl((tpl->dst_addr.ip.addr.v4.s_addr) & (0xFFFFFFFF >> (32 - conf_sm[i].mux_tuple.dst_mask))));  // Get destination net in struct in_addr format 
+		dst_sin_addr.s_addr = htonl(ntohl((tpl->dst_addr.ip.addr.v4.s_addr) & (0xFFFFFFFF << (32 - conf_sm[i].mux_tuple.dst_mask))));  // Get destination net in struct in_addr format 
 		ip_addr_init (&dst_net, &dst_sin_addr, AF_INET); // Get destination net in ip_address_t format 
+
 		if ( (ip_addr_cmp(&(conf_sm[i].mux_tuple.src_net),&src_net) == 0) ||
 			 (ip_addr_cmp(&(conf_sm[i].mux_tuple.dst_net),&dst_net)) == 0)  {
 			return (&(conf_sm [i]));
@@ -1878,27 +2029,14 @@ data_simplemux_t * lookup_mux_tuple (packet_tuple_t *tpl, fwd_entry_t *fe)
   
 	// Dir fuente y dir destino del túnel 
 	for (i = 0 ; i < numdsm ;  ++i) {
-		if((strcmp(ip_addr_to_char(&(conf_sm[i].mux_tuple.srloc.ip)),lisp_addr_to_char(fe->srloc))==0) &&
-			(strcmp(ip_addr_to_char(&(conf_sm[i].mux_tuple.drloc.ip)),lisp_addr_to_char(fe->drloc))==0)) {
-		/*if ( (lisp_addr_cmp(&(conf_sm[i].mux_tuple.srloc), fe->srloc) == 0) &&
-			 (lisp_addr_cmp(&(conf_sm[i].mux_tuple.drloc), fe->drloc) == 0)) {*/
+		if ( (lisp_addr_cmp(&(conf_sm[i].mux_tuple.srloc), fe->srloc) == 0) &&
+			 (lisp_addr_cmp(&(conf_sm[i].mux_tuple.drloc), fe->drloc) == 0)) {
 			return (&(conf_sm [i]));
 		}
 	}
 	
-//LMLOG(LINF,"ha pasado comp 2 redes and "   );
-  
-	// Dir fuente y dir destino del túnel 
-	for (i = 0 ; i < numdsm ;  ++i) {
-		if((strcmp(ip_addr_to_char(&(conf_sm[i].mux_tuple.srloc.ip)),lisp_addr_to_char(fe->srloc))==0) ||
-			(strcmp(ip_addr_to_char(&(conf_sm[i].mux_tuple.drloc.ip)),lisp_addr_to_char(fe->drloc))==0)) {
-		/*if ( (lisp_addr_cmp(&(conf_sm[i].mux_tuple.srloc), fe->srloc) == 0) &&
-			 (lisp_addr_cmp(&(conf_sm[i].mux_tuple.drloc), fe->drloc) == 0)) {*/
-			return (&(conf_sm [i]));
-		}
-	}
-	
-//LMLOG(LINF,"ha pasado comp 2 redes or "   );
+//LMLOG(LINF,"ha pasado comp 2 puertos or "   );
+
   
 	// Puerto fuente y Puerto destino 
 	for (i = 0 ; i < numdsm ;  ++i) {
@@ -1918,9 +2056,7 @@ data_simplemux_t * lookup_mux_tuple (packet_tuple_t *tpl, fwd_entry_t *fe)
 		}
 	}
 
-//LMLOG(LINF,"ha pasado comp 2 puertos or "   );
-
-//LMLOG(LINF,"ha pasado todos los comp tunel"   );
+	//LMLOG(LINF,"ha pasado todos los comp tunel");
 
 	//return (-1);
 	return (NULL);
@@ -1943,14 +2079,16 @@ int mux_tun_output_unicast (lbuf_t *b, packet_tuple_t *tuple, fwd_entry_t *fe)
 
 
 	data_simplemux_t *data_simplemux = NULL;	// stores the data simplemux lookup
+
+  int protocol = tuple->protocol;
 	// Lookup mux_tuple from packet tuple and forward entry
 	if ((data_simplemux = lookup_mux_tuple (tuple, fe)) != NULL) {
 		// Put tunnel data in data_simplemux_t
 		lisp_addr_copy(&(data_simplemux->mux_tuple.srloc), fe->srloc); 
 		lisp_addr_copy(&(data_simplemux->mux_tuple.drloc), fe->drloc); 
 		data_simplemux->mux_tuple.out_sock = *(fe->out_sock);
-        // Multiplex packets
-		switch(mux_packets ((unsigned char*)lbuf_data(b), lbuf_size(b), data_simplemux, out_muxed_packet, &out_total_length)) 
+     // Multiplex packets
+		switch(mux_packets ((unsigned char*)lbuf_data(b), lbuf_size(b), data_simplemux, out_muxed_packet, &out_total_length, protocol)) 
 		{
 		 case 0: // A muxed packet is NOT built
 			break;
@@ -1961,7 +2099,7 @@ int mux_tun_output_unicast (lbuf_t *b, packet_tuple_t *tuple, fwd_entry_t *fe)
 			memcpy (lbuf_data(&lisp_buffer), out_muxed_packet, out_total_length);
 			lisp_data_length = out_total_length;
 			lbuf_set_size(&lisp_buffer, lisp_data_length);
-			// Encapsulate output multiplexed packet in a LISP packet and sent it
+			// Encapsulate output multiplexed packet in a LISP packet and sent it      
 			mux_output_unicast(&lisp_buffer,data_simplemux); 
 			break;
 		 case 2: // A previous muxed packet is built to be sent because maximum size is reached. This function must be called again, using the same input parameters.
@@ -1974,7 +2112,7 @@ int mux_tun_output_unicast (lbuf_t *b, packet_tuple_t *tuple, fwd_entry_t *fe)
 			// Encapsulate output multiplexed packet in a LISP packet and sent it
 			mux_output_unicast(&lisp_buffer,data_simplemux); 
 			// Multiplex again
-			switch(mux_packets ((unsigned char*)lbuf_data(b), lbuf_size(b), data_simplemux, out_muxed_packet, &out_total_length))
+			switch(mux_packets ((unsigned char*)lbuf_data(b), lbuf_size(b), data_simplemux, out_muxed_packet, &out_total_length, protocol))
 			{
 			 case 0:
 				break;
@@ -1986,7 +2124,7 @@ int mux_tun_output_unicast (lbuf_t *b, packet_tuple_t *tuple, fwd_entry_t *fe)
 				lisp_data_length = out_total_length;
 				lbuf_set_size(&lisp_buffer, lisp_data_length);
 				// Encapsulate output multiplexed packet in a LISP packet and sent it
-				mux_output_unicast(&lisp_buffer,data_simplemux); 
+				mux_output_unicast(&lisp_buffer,data_simplemux);
 				break;
 			 case 2:
 				LMLOG(LCRIT, "Invalid loop when mux_packets function is called\n");
@@ -2163,7 +2301,7 @@ void demux_packets (unsigned char *packet_in, uint32_t size_packet_in, int tun_r
 				// since the two most significant bits are 0, the length is the value of the char
 				packet_length = buffer_from_net[position] % maximum_packet_length;
 				LMLOG(LDBG_2, " Mux separator of 1 byte: (%02x) ", buffer_from_net[position]);
-				PrintByte(LDBG_2, 8, bits);
+        PrintByte(LDBG_2, 8, bits);
 
 				position ++;
 
@@ -2179,10 +2317,8 @@ void demux_packets (unsigned char *packet_in, uint32_t size_packet_in, int tun_r
 					// I get the 6 (or 7) less significant bits of the first byte by using modulo maximum_packet_length
 					// I do the product by 128, because the next byte includes 7 bits of the length
 					packet_length = ((buffer_from_net[position] % maximum_packet_length) * 128 );
-
 					// I add the value of the 7 less significant bits of the second byte
 					packet_length = packet_length + (buffer_from_net[position+1] % 128);
-
 					if (debug_level ) {
 						LMLOG(LDBG_2, " Mux separator of 2 bytes: (%02x) ", buffer_from_net[position]);
 						PrintByte(LDBG_2, 8, bits);
@@ -2198,14 +2334,11 @@ void demux_packets (unsigned char *packet_in, uint32_t size_packet_in, int tun_r
 					// I get the 6 (or 7) less significant bits of the first byte by using modulo maximum_packet_length
 					// I do the product by 16384 (2^14), because the next two bytes include 14 bits of the length
 					packet_length = ((buffer_from_net[position] % maximum_packet_length) * 16384 );
-
 					// I get the 6 (or 7) less significant bits of the second byte by using modulo 128
 					// I do the product by 128, because the next byte includes 7 bits of the length
 					packet_length = packet_length + ((buffer_from_net[position+1] % 128) * 128 );
-
 					// I add the value of the 7 less significant bits of the second byte
 					packet_length = packet_length + (buffer_from_net[position+2] % 128);
-
 					if (debug_level ) {
 						LMLOG(LDBG_2, " Mux separator of 2 bytes: (%02x) ", buffer_from_net[position]);
 						PrintByte(LDBG_2, 8, bits);
@@ -2296,10 +2429,9 @@ void demux_packets (unsigned char *packet_in, uint32_t size_packet_in, int tun_r
 					// I get the 6 (or 7) less significant bits of the first byte by using modulo maximum_packet_length
 					// I do the product by 128, because the next byte includes 7 bits of the length
 					packet_length = ((buffer_from_net[position] % maximum_packet_length) * 128 );
-
 					// I add the value of the 7 less significant bits of the second byte
+             
 					packet_length = packet_length + (buffer_from_net[position+1] % 128);
-
 					if (debug_level ) {
 						LMLOG(LDBG_2, " Mux separator of 2 bytes: (%02x) ", buffer_from_net[position]);
 						PrintByte(LDBG_2, 8, bits);
@@ -2315,14 +2447,11 @@ void demux_packets (unsigned char *packet_in, uint32_t size_packet_in, int tun_r
 					// I get the 6 (or 7) less significant bits of the first byte by using modulo maximum_packet_length
 					// I do the product by 16384 (2^14), because the next two bytes include 14 bits of the length
 					packet_length = ((buffer_from_net[position] % maximum_packet_length) * 16384 );
-
 					// I get the 6 (or 7) less significant bits of the second byte by using modulo 128
 					// I do the product by 128, because the next byte includes 7 bits of the length
 					packet_length = packet_length + ((buffer_from_net[position+1] % 128) * 128 );
-
 					// I add the value of the 7 less significant bits of the second byte
 					packet_length = packet_length + (buffer_from_net[position+2] % 128);
-
 					if (debug_level ) {
 						LMLOG(LDBG_2, " Mux separator of 2 bytes: (%02x) ", buffer_from_net[position]);
 						PrintByte(LDBG_2, 8, bits);
