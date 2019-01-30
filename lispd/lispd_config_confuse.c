@@ -802,15 +802,13 @@ configure_xtrsm(cfg_t *cfg)
         if (cfg_getstr(cfg_getnsec(cfg, "simplemux",i),"lispsrc")!=NULL)
            {
            afi = ip_afi_from_char(cfg_getstr(cfg_getnsec(cfg, "simplemux",i),"lispsrc"));
-           res=inet_pton(afi,cfg_getstr(cfg_getnsec(cfg, "simplemux",i),"lispsrc"),&lispsrcbin);
-           lisp_addr_set_lafi(&(conf_sm[i].mux_tuple.srloc),afi);
+           res=inet_pton(afi,cfg_getstr(cfg_getnsec(cfg, "simplemux",i),"lispsrc"),&lispsrcbin); 
            ip_addr_init(&(conf_sm[i].mux_tuple.srloc.ip),&lispsrcbin,afi);
            } 
         if (cfg_getstr(cfg_getnsec(cfg, "simplemux",i),"lispdst")!=NULL)
            {
            afi = ip_afi_from_char(cfg_getstr(cfg_getnsec(cfg, "simplemux",i),"lispdst"));
-           res=inet_pton(afi,cfg_getstr(cfg_getnsec(cfg, "simplemux",i),"lispdst"),&lispdstbin);
-           lisp_addr_set_lafi(&(conf_sm[i].mux_tuple.drloc),afi);
+           res=inet_pton(afi,cfg_getstr(cfg_getnsec(cfg, "simplemux",i),"lispdst"),&lispdstbin); 
            ip_addr_init(&(conf_sm[i].mux_tuple.drloc.ip),&lispdstbin,afi);
            } 
         if (cfg_getstr(cfg_getnsec(cfg, "simplemux",i),"netsrc")!=NULL)
@@ -831,6 +829,9 @@ configure_xtrsm(cfg_t *cfg)
            token=strtok(NULL,"/");
            conf_sm[i].mux_tuple.dst_mask=atoi(token);
            } 
+		   
+		   
+		   
         conf_sm[i].user_mtu=cfg_getint(cfg_getnsec(cfg, "simplemux",i),"mtu-user");
         conf_sm[i].interface_mtu=cfg_getint(cfg_getnsec(cfg, "simplemux",i),"mtu-int");
         conf_sm[i].limit_numpackets_tun=cfg_getint(cfg_getnsec(cfg, "simplemux",i),"num-pkt");
@@ -838,7 +839,9 @@ configure_xtrsm(cfg_t *cfg)
         conf_sm[i].timeout=cfg_getint(cfg_getnsec(cfg, "simplemux",i),"timeout");
         conf_sm[i].period=cfg_getint(cfg_getnsec(cfg, "simplemux",i),"period");
         conf_sm[i].ROHC_mode=cfg_getint(cfg_getnsec(cfg, "simplemux",i),"ROHC-mode");
-
+				conf_sm[i].IPSEC_mode=cfg_getint(cfg_getnsec(cfg, "simplemux",i),"IPSEC-mode");
+        conf_sm[i].percentage_packets_secure=cfg_getfloat(cfg_getnsec(cfg, "simplemux",i),"min-rate-secure-packets");
+		
         // FIXME: New parameters included, not used in MUX yet
         conf_sm[i].port_dst=cfg_getint(cfg_getnsec(cfg, "simplemux",i),"port-dst");
         conf_sm[i].port_src=cfg_getint(cfg_getnsec(cfg, "simplemux",i),"port-src");
@@ -848,7 +851,17 @@ configure_xtrsm(cfg_t *cfg)
 		} else if ( conf_sm[i].ROHC_mode > 2 ) { 
 			conf_sm[i].ROHC_mode = 2;
 		}
+  
+	if ( conf_sm[i].IPSEC_mode < 0 ) {  // check IPSEC_mode option
+			conf_sm[i].IPSEC_mode = 0;
+		} else if ( conf_sm[i].IPSEC_mode > 2 ) { 
+			conf_sm[i].IPSEC_mode = 2;
+		}
 
+  if (conf_sm[i].IPSEC_mode != 2 ) {  // check IPSEC_mode option
+			conf_sm[i].percentage_packets_secure = -1;
+		} 
+   
     }
 /*SIMPLEMUX: simplemux data*/
 
@@ -907,10 +920,12 @@ configure_xtrsm(cfg_t *cfg)
         }
         continue;
     }
+	
+	
 
     /* destroy the hash table */
     shash_destroy(lcaf_ht);
-
+	LMLOG(LINF, "despues destroy");
     return(GOOD);
 }
 
@@ -1264,8 +1279,10 @@ handle_config_file(char **lispdconf_conf_file)
             CFG_INT("timeout",                  0, CFGF_NONE),
             CFG_INT("period",                  0, CFGF_NONE),
             CFG_INT("ROHC-mode",                  0, CFGF_NONE),
-            CFG_INT("port-dst",                  99999, CFGF_NONE), //out of range
-            CFG_INT("port-src",                  99999, CFGF_NONE), //out of range
+            CFG_INT("port-dst",                  0, CFGF_NONE),
+            CFG_INT("port-src",                  0, CFGF_NONE),
+		      	CFG_INT("IPSEC-mode",	          0, CFGF_NONE),	
+   	        CFG_FLOAT("min-rate-secure-packets",	          0, CFGF_NONE),                
             CFG_END()
     };
 /*SIMPLEMUX: label definition for simplemux configuration*/
